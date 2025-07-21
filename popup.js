@@ -12,6 +12,8 @@ let recordsGroupList = [];
 let recordsContent = [];
 let expandedGroups = {};
 let recentlyViewedCount = 3; // 默认最近观看记录数量
+let dragSourceIndex = null;
+let dragOverIndex = null;
 
 // 加载保存的数据
 function loadData() {
@@ -41,52 +43,68 @@ function renderRecordGroups() {
         const groupItem = document.createElement('div');
         groupItem.className = 'record-item';
         groupItem.innerHTML = `
-          <h3 class="record-title">${group.title}</h3>
+        <div class="record-title-container">
+            <div class="drag-handle" draggable="true">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M8 12H16" stroke="#99a2aa" stroke-width="2" stroke-linecap="round"/>
+                    <path d="M8 8H16" stroke="#99a2aa" stroke-width="2" stroke-linecap="round"/>
+                    <path d="M8 16H16" stroke="#99a2aa" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+            </div>
+                <h3 class="record-title">${group.title}</h3>
+        </div>
 
-          <div class="record-bv">
+        <div class="record-bv">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M9 17V7L17 12L9 17Z" fill="currentColor"/>
-              <path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M9 17V7L17 12L9 17Z" fill="currentColor"/>
+            <path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
             <span>${group.BVCode}</span>
-          </div>
+        </div>
 
-          <div class="watch-records ${isExpanded ? 'expanded' : ''}">
+        <div class="watch-records ${isExpanded ? 'expanded' : ''}">
             ${group.records && group.records.length > 0
-                ? group.records.map(record => `
-                    <div class="record-entry">
-                        <div class="record-info">
-                            <a class="record-name" href="${record.url}" target="_blank" title="${record.name}">${record.name}</a>
-                            <span class="record-date">${formatDate(record.timestamp)}</span>
-                        </div>
-                        <div class="progress-bar">
-                            <div style="width:${record.progress}%"></div>
-                        </div>
-                    </div>`
-                ).join('')
-                : '<div class="empty-record">暂无观看记录</div>'
+            ? group.records.map(record => `
+                <div class="record-entry">
+                    <div class="record-info">
+                        <a class="record-name" href="${record.url}" target="_blank" title="${record.name}">${record.name}</a>
+                        <span class="record-date">${formatDate(record.timestamp)}</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div style="width:${record.progress}%"></div>
+                    </div>
+                </div>`
+            ).join('') : '<div class="empty-record">暂无观看记录</div>'
             }
-          </div>
+        </div>
 
-          <div class="actions">
+        <div class="actions">
             <button class="action-btn expand" data-bvcode="${group.BVCode}" data-type="expand">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <!-- 根据展开状态显示不同图标 -->
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <!-- 根据展开状态显示不同图标 -->
                 ${isExpanded ?
                 '<path d="M19 15L12 9L5 15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>' :
                 '<path d="M19 9L12 15L5 9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'
-            }
-              </svg>
-              ${isExpanded ? '收起' : '展开'}
+                }
+                </svg>
+                ${isExpanded ? '收起' : '展开'}
             </button>
             <button class="action-btn delete" data-index="${index}" data-type="delete">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M18 6V16.2C18 17.8802 18 18.7202 17.673 19.362C17.3854 19.9265 16.9265 20.3854 16.362 20.673C15.7202 21 14.8802 21 13.2 21H10.8C9.11984 21 8.27976 21 7.63803 20.673C7.07354 20.3854 6.6146 19.9265 6.32698 19.362C6 18.7202 6 17.8802 6 16.2V6M4 6H20M16 6L15.7294 5.18807C15.4671 4.40125 15.3359 4.00784 15.0927 3.71698C14.8779 3.46013 14.6021 3.26132 14.2905 3.13878C13.9376 3 13.516 3 12.6726 3H11.3274C10.484 3 10.0624 3 9.70951 3.13878C9.39792 3.26132 9.12208 3.46013 8.90729 3.71698C8.66405 4.00784 8.53292 4.40125 8.27064 5.18807L8 6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-              </svg>
-              删除
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M18 6V16.2C18 17.8802 18 18.7202 17.673 19.362C17.3854 19.9265 16.9265 20.3854 16.362 20.673C15.7202 21 14.8802 21 13.2 21H10.8C9.11984 21 8.27976 21 7.63803 20.673C7.07354 20.3854 6.6146 19.9265 6.32698 19.362C6 18.7202 6 17.8802 6 16.2V6M4 6H20M16 6L15.7294 5.18807C15.4671 4.40125 15.3359 4.00784 15.0927 3.71698C14.8779 3.46013 14.6021 3.26132 14.2905 3.13878C13.9376 3 13.516 3 12.6726 3H11.3274C10.484 3 10.0624 3 9.70951 3.13878C9.39792 3.26132 9.12208 3.46013 8.90729 3.71698C8.66405 4.00784 8.53292 4.40125 8.27064 5.18807L8 6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+                删除
             </button>
-          </div>
+        </div>
         `;
+        // 绑定拖拽事件
+        const dragHandle = groupItem.querySelector('.drag-handle');
+        dragHandle.addEventListener('dragstart', (e) => onDragStart(e, index));
+        dragHandle.addEventListener('dragend', onDragEnd);
+
+        groupItem.addEventListener('dragover', (e) => onDragOver(e, index));
+        groupItem.addEventListener('dragleave', onDragLeave);
+        groupItem.addEventListener('drop', (e) => onDrop(e, index));
         recordList.appendChild(groupItem);
     });
 
@@ -131,7 +149,7 @@ function showNotification(message, isSuccess = true) {
     notification.style.background = isSuccess ? '#f0f9eb' : '#fef0f0';
     notification.style.color = isSuccess ? '#67c23a' : '#f56c6c';
     notification.style.display = 'block';
-    
+
     setTimeout(() => {
         notification.style.display = 'none';
     }, 2000);
@@ -236,14 +254,14 @@ function formatDate(isoString) {
 // 保存设置
 function saveSettings() {
     const newCount = parseInt(recordCountInput.value);
-    
+
     if (isNaN(newCount) || newCount < 1 || newCount > 50) {
         showError('请输入1-50之间的有效数字');
         return;
     }
-    
+
     recentlyViewedCount = newCount;
-    
+
     chrome.storage.sync.set({ recentlyViewedCount }, () => {
         showNotification('设置已保存！');
         // 更新所有现有记录组
@@ -267,3 +285,77 @@ recordCountInput.addEventListener('keypress', (e) => {
         saveSettings();
     }
 });
+
+// 添加拖拽事件处理函数
+function onDragStart(e, index) {
+    dragSourceIndex = index;
+    e.currentTarget.closest('.record-item').classList.add('dragging');
+    e.dataTransfer.setData('text/plain', index);
+    e.dataTransfer.effectAllowed = 'move';
+}
+
+function onDragOver(e, index) {
+    e.preventDefault();
+
+    const targetItem = e.currentTarget;
+    const rect = targetItem.getBoundingClientRect();
+    const y = e.clientY - rect.top;
+    const height = rect.height;
+
+    // 移除所有drag-over类
+    document.querySelectorAll('.record-item').forEach(item => {
+        item.classList.remove('drag-over-top', 'drag-over-bottom');
+    });
+
+    // 确定是放在上半部分还是下半部分
+    if (y < height / 2) {
+        targetItem.classList.add('drag-over-top');
+    } else {
+        targetItem.classList.add('drag-over-bottom');
+    }
+
+    dragOverIndex = index;
+    return false;
+}
+
+function onDragLeave(e) {
+    e.currentTarget.classList.remove('drag-over-top', 'drag-over-bottom');
+}
+
+function onDragEnd(e) {
+    document.querySelectorAll('.record-item').forEach(item => {
+        item.classList.remove('dragging', 'drag-over-top', 'drag-over-bottom');
+    });
+    dragSourceIndex = null;
+    dragOverIndex = null;
+}
+
+function onDrop(e, index) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const sourceIndex = dragSourceIndex;
+    const targetIndex = dragOverIndex;
+
+    if (sourceIndex !== null && targetIndex !== null && sourceIndex !== targetIndex) {
+        // 计算最终位置（考虑插入方向）
+        const finalPosition = e.currentTarget.classList.contains('drag-over-top') ? targetIndex : targetIndex + 1;
+
+        // 移动数组元素
+        const movedItem = recordsGroupList.splice(sourceIndex, 1)[0];
+        let newIndex = finalPosition;
+
+        if (finalPosition > sourceIndex) {
+            newIndex = finalPosition - 1;
+        }
+
+        recordsGroupList.splice(newIndex, 0, movedItem);
+
+        // 保存并重新渲染
+        saveData();
+        showNotification('记录组已重新排序');
+    }
+
+    onDragEnd();
+    return false;
+}
