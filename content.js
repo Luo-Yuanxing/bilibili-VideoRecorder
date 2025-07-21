@@ -47,7 +47,7 @@ chrome.storage.sync.get(['recordsGroupList', 'recentlyViewedCount '], (data) => 
         console.log(data);
         if (!data.recentlyViewedCount) {
           // 获取不到让插件崩溃
-          alert('无法获取最近观看记录数量，请联系开发者');
+          alert('无法获取最近观看记录数量，请在设置界面保存设置，或联系开发者');
           throw new Error('无法获取最近观看记录数量');
         }
         const recentlyViewedCount  = data.recentlyViewedCount;
