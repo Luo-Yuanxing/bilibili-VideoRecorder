@@ -6,6 +6,13 @@
 - 保存多个视频的播放进度和时间戳
 - 自定义每个视频保存的最近观看记录数量
 
+### 说明
+特殊合集：
+- 目前仅支持BV号相同的视频合集，具体视频为同一BV号下不同分P，例如[https://www.bilibili.com/video/BV1ps4y1d73V/?p=61](https://www.bilibili.com/video/BV1ps4y1d73V/?spm_id_from=333.788.videopod.sections&vd_source=149d3dc03b60b6fd7822edc452305a7c&p=61) 中p=61为第61个视频
+
+一般合集：
+- 一般的合集各个视频有不同的BV号，此功能正在开发中
+
 ### 扩展界面预览
 <img src="screenshot.png" alt="扩展界面预览" style="width:50%;" />
 
@@ -66,8 +73,6 @@
 1. 内容脚本仅在bilibili.com域名下激活
 2. 同步存储上限约100KB（建议保持记录组<20个）
 3. 数据通过Chrome账户同步（需登录）
-4. 目前仅支持BV号相同的视频合集，具体视频为同一BV号下不同分P
-5. 一般的合集各个视频有不同的BV号，此功能正在开发中
 
 ## 🤝 贡献指南
 欢迎提交PR改进以下方面：
