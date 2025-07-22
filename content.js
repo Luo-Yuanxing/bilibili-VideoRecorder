@@ -27,6 +27,14 @@ chrome.storage.sync.get(['recordsGroupMap', 'recentlyViewedCount'], (data) => {
 
         // 2.2 获取url
         const videoUrl = window.location.href;
+        // 2.3 编辑url，删除查询参数
+        const url = new URL(videoUrl);
+        url.search = '';
+        if (recordsGroupMapType === "recordsGroupListSpecial") {
+            // 特殊合集视频，添加videoUrl中的p参数
+            const urlParams = new URLSearchParams(videoUrl.split('?')[1]);
+            url.searchParams.set('p', urlParams.get('p') || '1');
+        }
 
         // 记录播放进度（节流处理）
         let lastRecordedTime = 0;
@@ -108,3 +116,27 @@ async function isSpecialCollection(BVCode) {
             return false; // 失败时默认按普通视频处理
         });
 }
+
+// 页面加载完成执行
+document.addEventListener('DOMContentLoaded', () => {
+    // 确保脚本在页面加载后执行
+    if (document.querySelector('video')) {
+        console.log('视频页面脚本已注入');
+    } else {
+        console.warn('未检测到视频元素，脚本可能未正确注入');
+    }
+    chrome.storage.sync.get(['lastClickedLink'], (data) => {
+        if (data.lastClickedLink) {
+            console.log('最后点击的链接:', data.lastClickedLink);
+            // 判断是否为lastClickedLink.url的页面
+            if (window.location.href === data.lastClickedLink.url) {
+                // 如果是，设置视频进度
+                const video = document.querySelector('video');
+                if (video && data.lastClickedLink.progress) {
+                    video.currentTime = (data.lastClickedLink.progress / 100) * video.duration - 5; // 减5秒，避免跳转到最后
+                    console.log(`视频进度已设置为: ${data.lastClickedLink.progress}%`);
+                }
+            }
+        }
+    });
+});

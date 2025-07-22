@@ -35,6 +35,6 @@
   }],
   
   // 权限声明
-  "permissions": ["storage", "activeTab"],
+  "permissions": ["storage", "activeTab", "tabs"],
   "host_permissions": ["*://*.bilibili.com/*"]
 }

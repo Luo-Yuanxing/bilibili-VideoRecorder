@@ -23,10 +23,11 @@ let dragSourceIndex = null;
 let dragOverIndex = null;
 let dragSourceGroup = null;
 let dragOverGroup = null;
+let lastClickedLink = null;
 
 // 加载保存的数据
 function loadData() {
-    chrome.storage.sync.get(['recordsGroupMap', 'recentlyViewedCount'], (data) => {
+    chrome.storage.sync.get(['recordsGroupMap', 'recentlyViewedCount', 'lastClickedLink'], (data) => {
         // 确保recordsGroupMap存在且符合预期格式
         if (data.recordsGroupMap && data.recordsGroupMap.recordsGroupListSpecial) {
             recordsGroupMap = data.recordsGroupMap;
@@ -34,6 +35,9 @@ function loadData() {
         if (data.recentlyViewedCount) {
             recentlyViewedCount = data.recentlyViewedCount;
             recordCountInput.value = recentlyViewedCount;
+        }
+        if (data.lastClickedLink) {
+            lastClickedLink = data.lastClickedLink;
         }
         initRecordGroups();
         renderRecordGroups();
@@ -108,7 +112,7 @@ function renderRecordGroups() {
                         ? recordCard.records.map(record => `
                     <div class="record-entry">
                     <div class="record-info">
-                        <a class="record-name" href="${record.url}" target="_blank" title="${record.name}">${record.name}</a>
+                        <a class="record-name" href="${record.url}" target="_blank" title="${record.name}" data-progress="${record.progress}">${record.name}</a>
                         <span class="record-date">${formatDate(record.timestamp)}</span>
                     </div>
                     <div class="progress-bar">
@@ -154,8 +158,6 @@ function renderRecordGroups() {
     document.querySelectorAll('.action-btn').forEach(btn => {
         btn.addEventListener('click', handleAction);
     });
-
-
 }
 
 // 处理按钮动作
@@ -180,7 +182,6 @@ function handleAction(e) {
         renderRecordGroups();
     }
 }
-
 
 // 保存数据
 function saveData() {
@@ -342,6 +343,23 @@ document.addEventListener('DOMContentLoaded', () => {
             e.preventDefault();
             hideError();
             addNewRecordGroupForSpecial();
+        }
+    });
+
+    document.body.addEventListener('click', (e) => {
+        if (e.target.matches('.record-name')) {
+            e.preventDefault();
+            const url = e.target.href;
+            chrome.storage.sync.set({
+                lastClickedLink: {
+                    url: url,
+                    progress: e.target.dataset.progress || 0
+                }
+            }, () => {
+                console.log('最后点击的链接已保存:', { url: url, progress: e.target.dataset.progress || 0 });
+            });
+            // 打开新标签页
+            chrome.tabs.create({ url: url });
         }
     });
 });
