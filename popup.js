@@ -660,3 +660,12 @@ clearCacheBtn.addEventListener('click', () => {
         chrome.runtime.reload();
     }
 });
+
+// 接收来自content.js的消息
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    if (request.action === 'refreshPopup') {
+        // 刷新记录组数据
+        loadData();
+        sendResponse({ status: 'success' });
+    }
+});
