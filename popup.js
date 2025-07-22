@@ -91,7 +91,12 @@ function renderRecordGroups() {
             }
 
             (recordsGroupMap[id] || []).forEach((recordCard, index) => {
-                const isExpanded = expandedGroups[recordCard.BVCode] || false;
+                // 生成唯一标识键（特殊合集用BVCode，普通合集用sid+spaceId）
+                const recordKey = id === 'recordsGroupListSpecial'
+                    ? `special_${recordCard.BVCode}`
+                    : `normal_${recordCard.sid}_${recordCard.spaceId}`;
+
+                const isExpanded = expandedGroups[recordKey] || false;
                 const groupItem = document.createElement('div');
                 groupItem.className = 'record-item';
                 groupItem.innerHTML = `
@@ -131,7 +136,7 @@ function renderRecordGroups() {
                 </div>
 
                 <div class="actions">
-                <button class="action-btn expand" data-bvcode="${recordCard.BVCode}" data-type="expand">
+                <button class="action-btn expand" data-key="${recordKey}" data-type="expand">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     ${isExpanded ?
                         '<path d="M19 15L12 9L5 15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>' :
@@ -169,7 +174,7 @@ function renderRecordGroups() {
 
 // 处理按钮动作
 function handleAction(e) {
-    const bvcode = e.target.dataset.bvcode;
+    const key = e.target.dataset.key; // 使用新的唯一键
     const type = e.target.dataset.type;
     const index = e.target.dataset.index;
     const groupId = e.target.dataset.id; // 获取记录组ID
@@ -179,12 +184,12 @@ function handleAction(e) {
         // 从对应的记录组数组中删除
         recordsGroupMap[groupId].splice(index, 1);
         // 删除展开状态
-        if (expandedGroups[bvcode]) delete expandedGroups[bvcode];
+        if (expandedGroups[key]) delete expandedGroups[key];
         saveData();
         showNotification('此卡片已删除！');
     } else if (type === 'expand') {
         // 切换展开状态
-        expandedGroups[bvcode] = !expandedGroups[bvcode];
+        expandedGroups[key] = !expandedGroups[key];
         // 重新渲染记录组列表
         renderRecordGroups();
     }
@@ -639,7 +644,8 @@ clearCacheBtn.addEventListener('click', () => {
         chrome.storage.sync.clear(() => {
             recordsGroupMap = { "recordsGroupListSpecial": [], "recordsGroupListNormal": [] };
             expandedGroups = {};
-            recentlyViewedCount = 3; // 重置默认值
+            recentlyViewedCount = 3;
+            expandedGroups = {};
             loadData();
             showNotification('所有存储数据已清空！');
         });
