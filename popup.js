@@ -294,6 +294,13 @@ async function addNewRecordGroupForSpecial() {
 
         const title = data.data.title;
 
+        // 检查是否已存在同BVCode记录组
+        const existingGroup = recordsGroupMap['recordsGroupListSpecial'].find(group => group.BVCode === BVCode);
+        if (existingGroup) {
+            showError('该特殊合集已存在，请勿重复添加');
+            return;
+        }
+
         recordsGroupMap['recordsGroupListSpecial'].push({
             title: title,
             BVCode: BVCode,
@@ -353,6 +360,13 @@ async function addNewRecordGroupForNormal() {
         const collectionInfo = await getCollectionInfo(BVCode);
         if (!collectionInfo) {
             throw new Error('获取合集信息失败，请检查BV号是否正确');
+        }
+
+        // 检查是否已存在同sid记录组
+        const existingGroup = recordsGroupMap['recordsGroupListNormal'].find(group => group.sid === collectionInfo.sid);
+        if (existingGroup) {
+            showError('该合集已存在，请勿重复添加');
+            return;
         }
 
         recordsGroupMap['recordsGroupListNormal'].push({
