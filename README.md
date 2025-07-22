@@ -6,6 +6,13 @@
 - 保存多个视频的播放进度和时间戳
 - 自定义每个视频保存的最近观看记录数量
 
+### 说明
+特殊合集：
+- 目前仅支持BV号相同的视频合集，具体视频为同一BV号下不同分P，例如[https://www.bilibili.com/video/BV1ps4y1d73V/?p=61](https://www.bilibili.com/video/BV1ps4y1d73V/?spm_id_from=333.788.videopod.sections&vd_source=149d3dc03b60b6fd7822edc452305a7c&p=61) 中p=61为第61个视频
+
+一般合集：
+- 一般的合集各个视频有不同的BV号，此功能正在开发中
+
 ### 扩展界面预览
 <img src="screenshot.png" alt="扩展界面预览" style="width:50%;" />
 
@@ -29,12 +36,12 @@
    - 支持跨设备同步（需登录Chrome账号）
 
 ## 🔧 安装步骤
-1. 克隆仓库或下载ZIP文件
+1. 克隆仓库或下载ZIP文件，解压zip文件
 2. 在Chrome中加载扩展：
-- 访问 `chrome://extensions/`
+- 访问 Chrome 管理控制程序 (chrome://extensions/)
 - 启用"开发者模式"
-- 点击"加载已解压的扩展程序"
-- 选择项目目录
+- 点击"加载已解压的扩展程序"，选择项目目录
+- 或直接拖动加压后文件夹到 chrome://extensions/ 页面
 
 3. 在Bilibili视频页面中，扩展会自动激活
 
