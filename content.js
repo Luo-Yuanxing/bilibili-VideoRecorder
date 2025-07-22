@@ -64,7 +64,8 @@ async function main() {
 
             // 记录播放进度（节流处理）
             let lastRecordedTime = 0;
-            video.addEventListener('timeupdate', throttle(() => {
+
+            const getProgressInterval = setInterval(() => {
                 if (!isContextValid()) return;
 
                 const progress = Math.floor((video.currentTime / video.duration) * 100);
@@ -135,8 +136,9 @@ async function main() {
                             [recordsGroupMapType]: updatedGroups
                         }
                     });
+                    console.log(`已更新${recordsGroupMapType}记录组`);
                 });
-            }, 30000)); // 30秒节流
+            }, 30000);
         }
     });
 }
@@ -158,15 +160,15 @@ const observer = new MutationObserver(() => {
 observer.observe(document.body, { childList: true, subtree: true });
 
 // 节流函数
-function throttle(fn, delay) {
-    let lastCall = 0;
-    return (...args) => {
-        const now = new Date().getTime();
-        if (now - lastCall < delay) return;
-        lastCall = now;
-        return fn(...args);
-    };
-}
+// function createThrottledFunction(fn, delay) {
+//     let lastCall = 0;
+//     return (...args) => {
+//         const now = new Date().getTime();
+//         if (now - lastCall < delay) return;
+//         lastCall = now;
+//         fn(...args);
+//     };
+// }
 
 // 拷贝popup.js中的isSpecialCollection函数
 async function isSpecialCollection(BVCode) {
