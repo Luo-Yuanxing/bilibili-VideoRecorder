@@ -388,18 +388,101 @@
       border-top: 1px solid #e0e6ed;
       margin-top: 10px;
     }
+
+    .type-selector {
+      display: flex;
+      gap: 15px;
+      margin-bottom: 15px;
+    }
+    
+    .type-option {
+      flex: 1;
+      padding: 12px;
+      border-radius: 8px;
+      border: 1px solid #ddd;
+      background: white;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    
+    .type-option:hover {
+      border-color: #00a1d6;
+    }
+    
+    .type-option.selected {
+      background-color: rgba(0, 161, 214, 0.1);
+      border-color: #00a1d6;
+      color: #00a1d6;
+      font-weight: 500;
+    }
+    
+    .type-option .icon {
+      display: block;
+      margin: 0 auto 8px;
+      width: 24px;
+      height: 24px;
+    }
+    
+    .type-label {
+      font-size: 13px;
+    }
+    
+    .bili-collection-icon {
+      background: linear-gradient(135deg, #FB7299, #FF9F6F);
+      border-radius: 50%;
+      position: relative;
+    }
+    
+    .bili-collection-icon::before {
+      content: "";
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 12px;
+      height: 12px;
+      border: 2px solid white;
+      border-radius: 2px;
+    }
+    
+    .bili-video-icon {
+      background: linear-gradient(135deg, #00A0D8, #5FCCE0);
+      border-radius: 50%;
+      position: relative;
+    }
+    
+    .bili-video-icon::before {
+      content: "";
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 12px;
+      height: 8px;
+      border-left: 2px solid white;
+      border-bottom: 2px solid white;
+    }
+    
+    .type-hint {
+      font-size: 12px;
+      color: #666;
+      margin-top: 8px;
+      margin-bottom: 5px;
+      text-align: center;
+    }
   </style>
 </head>
 
 <body>
-  <div class="header">
+  <div class="header logo">
     <div class="logo-title">
       <div class="bili-logo"></div>
       <h1>Bilibili 观看记录管理器</h1>
     </div>
   </div>
 
-  <div class="section">
+  <div class="section settings">
     <h3>记录设置</h3>
     <div class="setting-item">
       <label class="form-title">保存最近观看记录数量：</label>
@@ -416,8 +499,20 @@
     </div>
   </div>
 
-  <div class="section">
+  <div class="section add-group">
     <div class="add-group-container">
+      <div class="type-selector">
+        <div class="type-option selected" id="specialOption" data-type="special">
+          <div class="icon bili-collection-icon"></div>
+          <span class="type-label">特殊合集</span>
+        </div>
+        <div class="type-option" id="normalOption" data-type="normal">
+          <div class="icon bili-video-icon"></div>
+          <span class="type-label">一般合集</span>
+        </div>
+      </div>
+      <div class="type-hint" id="typeHint">特殊合集：多P系列视频，共享相同标题</div>
+      
       <div class="input-group">
         <input id="BVCodeInput" type="text" placeholder="输入视频BV号，如：BV1xx4y1y7xx">
       </div>
@@ -434,12 +529,12 @@
     </div>
   </div>
 
-  <div class="section">
+  <!-- <div class="section">
     <div class="records-list">
-      <h3>已保存的记录组</h3>
-      <div id="recordList"></div>
+      <h3></h3>
+      <div id="recordList-special-records"></div>
     </div>
-  </div>
+  </div> -->
 
   <div id="notification" class="notification">记录组已成功添加！</div>
 

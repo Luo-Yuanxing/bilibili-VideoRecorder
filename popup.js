@@ -1,6 +1,5 @@
 // DOM元素
 const saveBtn = document.getElementById('saveGroup');
-const recordList = document.getElementById('recordList');
 const BVCodeInput = document.getElementById('BVCodeInput');
 const notification = document.getElementById('notification');
 const errorMessage = document.getElementById('errorMessage');
@@ -8,64 +7,106 @@ const recordCountInput = document.getElementById('recordCount');
 const saveSettingBtn = document.getElementById('saveSetting');
 
 // 数据结构
-let recordsGroupList = [];
+// 控制页面内容
+let info = { "local": [{ "recordsGroupListSpecial": "特殊记录组", "recordsGroupListNormal": "普通记录组" }] };
+// 用于存储记录组数据
+/* recordsGroupListSpecial 结构为 [{
+            title: title,
+            BVCode: BVCode,
+            records: []
+        }] */
+let recordsGroupMap = { "recordsGroupListSpecial": [], "recordsGroupListNormal": [] };
 let recordsContent = [];
 let expandedGroups = {};
 let recentlyViewedCount = 3; // 默认最近观看记录数量
 let dragSourceIndex = null;
 let dragOverIndex = null;
+let dragSourceGroup = null;
+let dragOverGroup = null;
 
 // 加载保存的数据
 function loadData() {
-    chrome.storage.sync.get(['recordsGroupList', 'recentlyViewedCount'], (data) => {
-        if (data.recordsGroupList) {
-            recordsGroupList = data.recordsGroupList;
+    chrome.storage.sync.get(['recordsGroupMap', 'recentlyViewedCount'], (data) => {
+        // 确保recordsGroupMap存在且符合预期格式
+        if (data.recordsGroupMap && data.recordsGroupMap.recordsGroupListSpecial) {
+            recordsGroupMap = data.recordsGroupMap;
         }
         if (data.recentlyViewedCount) {
             recentlyViewedCount = data.recentlyViewedCount;
             recordCountInput.value = recentlyViewedCount;
         }
+        initRecordGroups();
         renderRecordGroups();
+    });
+}
+
+// 初始化记录组列表
+function initRecordGroups() {
+    // 遍历 info.local 数组中的每个对象
+    info.local.forEach(groupObj => {
+        // 遍历每个对象中的键值对
+        for (const [key, name] of Object.entries(groupObj)) {
+            let recordsGroupListElement = document.createElement('div');
+            recordsGroupListElement.className = 'section';
+            recordsGroupListElement.innerHTML = `
+                <div class="records-list">
+                    <h3>${name}</h3>
+                    <div id="${key}"></div>
+                </div>`;
+            const addGroupElement = document.getElementsByClassName('add-group')[0];
+            if (addGroupElement) {
+                addGroupElement.parentNode.insertBefore(recordsGroupListElement, addGroupElement.nextSibling);
+            } else {
+                document.body.appendChild(recordsGroupListElement);
+            }
+        }
     });
 }
 
 // 渲染记录组列表
 function renderRecordGroups() {
-    recordList.innerHTML = '';
 
-    if (recordsGroupList.length === 0) {
-        recordList.innerHTML = '<div class="empty">暂无保存的记录组</div>';
-        return;
-    }
+    info.local.forEach(groupObj => {
+        // 遍历每个对象中的键值对
+        for (const [id, name] of Object.entries(groupObj)) {
+            const recordList = document.getElementById(id);
+            if (!recordList) continue; // 确保元素存在
 
-    recordsGroupList.forEach((group, index) => {
-        const isExpanded = expandedGroups[group.BVCode] || false;
-        const groupItem = document.createElement('div');
-        groupItem.className = 'record-item';
-        groupItem.innerHTML = `
-        <div class="record-title-container">
-            <div class="drag-handle" draggable="true">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            recordList.innerHTML = '';
+
+            if (recordsGroupMap[id] && recordsGroupMap[id].length === 0) {
+                recordList.innerHTML = '<div class="empty">暂无保存的记录组</div>';
+                continue;
+            }
+
+            (recordsGroupMap[id] || []).forEach((recordCard, index) => {
+                const isExpanded = expandedGroups[recordCard.BVCode] || false;
+                const groupItem = document.createElement('div');
+                groupItem.className = 'record-item';
+                groupItem.innerHTML = `
+                <div class="record-title-container">
+                <div class="drag-handle" draggable="true">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path d="M8 12H16" stroke="#99a2aa" stroke-width="2" stroke-linecap="round"/>
                     <path d="M8 8H16" stroke="#99a2aa" stroke-width="2" stroke-linecap="round"/>
                     <path d="M8 16H16" stroke="#99a2aa" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                </div>
+                    <h3 class="record-title">${recordCard.title}</h3>
+                </div>
+
+                <div class="record-bv">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M9 17V7L17 12L9 17Z" fill="currentColor"/>
+                <path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                 </svg>
-            </div>
-                <h3 class="record-title">${group.title}</h3>
-        </div>
+                <span>${recordCard.BVCode}</span>
+                </div>
 
-        <div class="record-bv">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M9 17V7L17 12L9 17Z" fill="currentColor"/>
-            <path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-            <span>${group.BVCode}</span>
-        </div>
-
-        <div class="watch-records ${isExpanded ? 'expanded' : ''}">
-            ${group.records && group.records.length > 0
-            ? group.records.map(record => `
-                <div class="record-entry">
+                <div class="watch-records ${isExpanded ? 'expanded' : ''}">
+                ${recordCard.records && recordCard.records.length > 0
+                        ? recordCard.records.map(record => `
+                    <div class="record-entry">
                     <div class="record-info">
                         <a class="record-name" href="${record.url}" target="_blank" title="${record.name}">${record.name}</a>
                         <span class="record-date">${formatDate(record.timestamp)}</span>
@@ -73,45 +114,48 @@ function renderRecordGroups() {
                     <div class="progress-bar">
                         <div style="width:${record.progress}%"></div>
                     </div>
-                </div>`
-            ).join('') : '<div class="empty-record">暂无观看记录</div>'
-            }
-        </div>
+                    </div>`
+                        ).join('') : '<div class="empty-record">暂无观看记录</div>'
+                    }
+                </div>
 
-        <div class="actions">
-            <button class="action-btn expand" data-bvcode="${group.BVCode}" data-type="expand">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <!-- 根据展开状态显示不同图标 -->
-                ${isExpanded ?
-                '<path d="M19 15L12 9L5 15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>' :
-                '<path d="M19 9L12 15L5 9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'
-                }
-                </svg>
-                ${isExpanded ? '收起' : '展开'}
-            </button>
-            <button class="action-btn delete" data-index="${index}" data-type="delete">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <div class="actions">
+                <button class="action-btn expand" data-bvcode="${recordCard.BVCode}" data-type="expand">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    ${isExpanded ?
+                        '<path d="M19 15L12 9L5 15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>' :
+                        '<path d="M19 9L12 15L5 9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'
+                    }
+                    </svg>
+                    ${isExpanded ? '收起' : '展开'}
+                </button>
+                <button class="action-btn delete" data-id="${id}" data-index="${index}" data-type="delete">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path d="M18 6V16.2C18 17.8802 18 18.7202 17.673 19.362C17.3854 19.9265 16.9265 20.3854 16.362 20.673C15.7202 21 14.8802 21 13.2 21H10.8C9.11984 21 8.27976 21 7.63803 20.673C7.07354 20.3854 6.6146 19.9265 6.32698 19.362C6 18.7202 6 17.8802 6 16.2V6M4 6H20M16 6L15.7294 5.18807C15.4671 4.40125 15.3359 4.00784 15.0927 3.71698C14.8779 3.46013 14.6021 3.26132 14.2905 3.13878C13.9376 3 13.516 3 12.6726 3H11.3274C10.484 3 10.0624 3 9.70951 3.13878C9.39792 3.26132 9.12208 3.46013 8.90729 3.71698C8.66405 4.00784 8.53292 4.40125 8.27064 5.18807L8 6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                </svg>
-                删除
-            </button>
-        </div>
-        `;
-        // 绑定拖拽事件
-        const dragHandle = groupItem.querySelector('.drag-handle');
-        dragHandle.addEventListener('dragstart', (e) => onDragStart(e, index));
-        dragHandle.addEventListener('dragend', onDragEnd);
+                    </svg>
+                    删除
+                </button>
+                </div>`;
 
-        groupItem.addEventListener('dragover', (e) => onDragOver(e, index));
-        groupItem.addEventListener('dragleave', onDragLeave);
-        groupItem.addEventListener('drop', (e) => onDrop(e, index));
-        recordList.appendChild(groupItem);
+                // 绑定拖拽事件
+                const dragHandle = groupItem.querySelector('.drag-handle');
+                dragHandle.addEventListener('dragstart', (e) => onDragStart(e, id, index));
+                dragHandle.addEventListener('dragend', onDragEnd);
+
+                groupItem.addEventListener('dragover', (e) => onDragOver(e, id, index));
+                groupItem.addEventListener('dragleave', onDragLeave);
+                groupItem.addEventListener('drop', (e) => onDrop(e, id, index));
+                recordList.appendChild(groupItem);
+            });
+        }
     });
 
     // 添加事件监听器
     document.querySelectorAll('.action-btn').forEach(btn => {
         btn.addEventListener('click', handleAction);
     });
+
+
 }
 
 // 处理按钮动作
@@ -119,26 +163,29 @@ function handleAction(e) {
     const bvcode = e.target.dataset.bvcode;
     const type = e.target.dataset.type;
     const index = e.target.dataset.index;
+    const groupId = e.target.dataset.id; // 获取记录组ID
 
     if (type === 'delete') {
-        // 询问是否删除
-        if (!confirm('确定要删除这个记录组吗？')) return;
-        recordsGroupList.splice(index, 1);
+        if (!confirm('确定要删除这个卡片吗？')) return;
+        // 从对应的记录组数组中删除
+        recordsGroupMap[groupId].splice(index, 1);
         // 删除展开状态
         if (expandedGroups[bvcode]) delete expandedGroups[bvcode];
         saveData();
-        showNotification('记录组已删除！');
+        showNotification('此卡片已删除！');
     } else if (type === 'expand') {
         // 切换展开状态
         expandedGroups[bvcode] = !expandedGroups[bvcode];
-        // 重新渲染记录组列表（只更新变化的部分）
+        // 重新渲染记录组列表
         renderRecordGroups();
     }
 }
+
+
 // 保存数据
 function saveData() {
-    chrome.storage.sync.set({ recordsGroupList }, () => {
-        console.log('记录组已保存:', recordsGroupList);
+    chrome.storage.sync.set({ recordsGroupMap }, () => {
+        console.log('记录组已保存:', recordsGroupMap);
         renderRecordGroups();
     });
 }
@@ -166,8 +213,34 @@ function hideError() {
     errorMessage.style.display = 'none';
 }
 
-// 添加新记录组
-async function addNewRecordGroup() {
+// 检测是否是特殊合集类型
+// 检测url中参数p=1于p=2页面的title是否相同，相同则是特殊合集，不同则是普通视频
+async function isSpecialCollection(BVCode) {
+    const url1 = `https://www.bilibili.com/video/${BVCode}?p=1`;
+    const url2 = `https://www.bilibili.com/video/${BVCode}?p=2`;
+
+    // 使用Promise.all并行请求提高效率
+    return Promise.all([
+        fetch(url1).then(res => res.ok ? res.text() : Promise.reject('p1请求失败')),
+        fetch(url2).then(res => res.ok ? res.text() : Promise.reject('p2请求失败'))
+    ])
+        .then(([html1, html2]) => {
+            // 使用DOMParser确保更可靠的标题解析
+            const getTitle = html => {
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+                return doc.querySelector('h1').textContent.trim();
+            };
+
+            return getTitle(html1) === getTitle(html2);
+        })
+        .catch(error => {
+            console.error('检测失败:', error);
+            return false; // 失败时默认按普通视频处理
+        });
+}
+// 添加新记录组 -- 特殊合集
+async function addNewRecordGroupForSpecial() {
 
     const BVCode = BVCodeInput.value.trim();
 
@@ -179,6 +252,11 @@ async function addNewRecordGroup() {
     // 校验BV号格式
     if (!/^BV\w{10}$/i.test(BVCode)) {
         showError('BV号格式不正确，格式应为BV后跟10位字母数字');
+        return;
+    }
+
+    if (!await isSpecialCollection(BVCode)) {
+        showError('该BV号似乎不是特殊合集类型');
         return;
     }
 
@@ -194,13 +272,13 @@ async function addNewRecordGroup() {
         }
 
         const data = await response.json();
-        if (data.code !== 0) {
+        if (data.data.bvid !== BVCode) {
             throw new Error(data.message || '无法获取视频信息');
         }
 
         const title = data.data.title;
 
-        recordsGroupList.push({
+        recordsGroupMap['recordsGroupListSpecial'].push({
             title: title,
             BVCode: BVCode,
             records: []
@@ -223,11 +301,34 @@ async function addNewRecordGroup() {
 document.addEventListener('DOMContentLoaded', () => {
     loadData();
 
+    // 类型选择器功能
+    const specialOption = document.getElementById('specialOption');
+    const normalOption = document.getElementById('normalOption');
+    const typeHint = document.getElementById('typeHint');
+
+    [specialOption, normalOption].forEach(option => {
+        option.addEventListener('click', function () {
+            specialOption.classList.remove('selected');
+            normalOption.classList.remove('selected');
+            this.classList.add('selected');
+            typeHint.textContent = this.id === 'specialOption' ?
+                '特殊合集：多P系列视频，共享相同标题' :
+                '一般合集：单视频或多视频合集';
+        });
+    });
+
     // 保存按钮点击事件
     saveBtn.addEventListener('click', (event) => {
         event.preventDefault();
         hideError();
-        addNewRecordGroup();
+        // 获取选择的类型
+        const selectedType = document.querySelector('.type-option.selected').dataset.type;
+
+        if (selectedType === 'special') {
+            addNewRecordGroupForSpecial();
+        } else {
+            // TODO: addNewRecordGroupForNormal();
+        }
     });
 
     // 输入框输入事件 - 清除错误
@@ -240,7 +341,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (e.key === 'Enter') {
             e.preventDefault();
             hideError();
-            addNewRecordGroup();
+            addNewRecordGroupForSpecial();
         }
     });
 });
@@ -254,28 +355,29 @@ function formatDate(isoString) {
 // 保存设置
 function saveSettings() {
     const newCount = parseInt(recordCountInput.value);
-
     if (isNaN(newCount) || newCount < 1 || newCount > 50) {
         showError('请输入1-50之间的有效数字');
         return;
     }
 
     recentlyViewedCount = newCount;
-
     chrome.storage.sync.set({ recentlyViewedCount }, () => {
         showNotification('设置已保存！');
-        // 更新所有现有记录组
-        updateAllRecordGroups();
     });
 }
 
 // 更新所有记录组
 function updateAllRecordGroups() {
-    recordsGroupList.forEach(group => {
-        if (group.records && group.records.length > recentlyViewedCount) {
-            group.records = group.records.slice(0, recentlyViewedCount);
+    for (const id in recordsGroupMap) {
+        const group = recordsGroupMap[id];
+        if (group && Array.isArray(group)) {
+            group.forEach(record => {
+                if (record.records && record.records.length > recentlyViewedCount) {
+                    record.records = record.records.slice(0, recentlyViewedCount);
+                }
+            });
         }
-    });
+    }
     saveData();
 }
 
@@ -287,15 +389,18 @@ recordCountInput.addEventListener('keypress', (e) => {
 });
 
 // 添加拖拽事件处理函数
-function onDragStart(e, index) {
+function onDragStart(e, group, index) {
+    dragSourceGroup = group; // 新增全局变量
     dragSourceIndex = index;
     e.currentTarget.closest('.record-item').classList.add('dragging');
     e.dataTransfer.setData('text/plain', index);
     e.dataTransfer.effectAllowed = 'move';
 }
 
-function onDragOver(e, index) {
+function onDragOver(e, group, index) {
     e.preventDefault();
+    dragOverGroup = group;  // 设置目标组
+    dragOverIndex = index;  // 设置目标索引
 
     const targetItem = e.currentTarget;
     const rect = targetItem.getBoundingClientRect();
@@ -314,7 +419,6 @@ function onDragOver(e, index) {
         targetItem.classList.add('drag-over-bottom');
     }
 
-    dragOverIndex = index;
     return false;
 }
 
@@ -330,32 +434,27 @@ function onDragEnd(e) {
     dragOverIndex = null;
 }
 
-function onDrop(e, index) {
+function onDrop(e, group, index) {
     e.preventDefault();
     e.stopPropagation();
-
     const sourceIndex = dragSourceIndex;
     const targetIndex = dragOverIndex;
 
-    if (sourceIndex !== null && targetIndex !== null && sourceIndex !== targetIndex) {
-        // 计算最终位置（考虑插入方向）
-        const finalPosition = e.currentTarget.classList.contains('drag-over-top') ? targetIndex : targetIndex + 1;
+    // 确保源组和目标组相同（同组内拖拽）
+    if (dragSourceGroup === group && sourceIndex !== null && targetIndex !== null && sourceIndex !== targetIndex) {
+        const groupArray = recordsGroupMap[group];  // 使用传入的group参数
+
+        // 根据拖拽位置确定放置位置
+        const isTop = e.currentTarget.classList.contains('drag-over-top');
+        const finalPosition = isTop ? targetIndex : targetIndex + 1;
 
         // 移动数组元素
-        const movedItem = recordsGroupList.splice(sourceIndex, 1)[0];
-        let newIndex = finalPosition;
+        const movedItem = groupArray.splice(sourceIndex, 1)[0];
+        groupArray.splice(finalPosition, 0, movedItem);
 
-        if (finalPosition > sourceIndex) {
-            newIndex = finalPosition - 1;
-        }
-
-        recordsGroupList.splice(newIndex, 0, movedItem);
-
-        // 保存并重新渲染
         saveData();
         showNotification('记录组已重新排序');
     }
-
     onDragEnd();
     return false;
 }
