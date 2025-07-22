@@ -476,6 +476,19 @@
       margin-bottom: 5px;
       text-align: center;
     }
+
+    #clearCache {
+      background: #f56c6c;
+      color: white;
+      border: none;
+      padding: 12px 20px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      margin: 0 auto;
+    }
   </style>
 </head>
 
@@ -491,7 +504,7 @@
     <h3>记录设置</h3>
     <div class="setting-item">
       <label class="form-title">保存最近观看记录数量：</label>
-      <input id="recordCount" type="number" min="1" max="50" value="5" class="record-count-input">
+      <input id="recordCount" type="number" min="1" max="50" value="3" class="record-count-input">
       <button id="saveSetting" class="btn-outline" style="margin-top: 12px">
         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
           stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -542,6 +555,11 @@
   </div> -->
 
   <div id="notification" class="notification">记录组已成功添加！</div>
+
+  <!-- 清除插件全部存储数据 -->
+  <div>
+    <button id="clearCache" class="btn">清空存储数据</button>
+  </div>
 
   <script src="popup.js"></script>
 

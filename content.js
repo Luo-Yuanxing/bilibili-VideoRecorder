@@ -42,11 +42,13 @@ chrome.storage.sync.get(['recordsGroupMap', 'recentlyViewedCount'], (data) => {
             if (!isContextValid()) return;
 
             const progress = Math.floor((video.currentTime / video.duration) * 100);
+            const recordUrl = url.toString(); // 使用处理后的URL作为唯一标识
+
 
             // 3. 生成观看记录
-            const record = {
+            const newRecord = {
                 name: videoName,
-                url: videoUrl,
+                url: recordUrl,
                 timestamp: new Date().toISOString(),
                 progress,
                 duration: video.duration
@@ -54,7 +56,6 @@ chrome.storage.sync.get(['recordsGroupMap', 'recentlyViewedCount'], (data) => {
 
             // 4. 更新存储（保留最近recentlyViewedCount 条）
             chrome.storage.sync.get(['recordsGroupMap', 'recentlyViewedCount'], (data) => {
-                console.log(data);
                 if (!data.recentlyViewedCount) {
                     // 获取不到让插件崩溃
                     alert('无法获取最近观看记录数量，请在设置界面保存设置，或联系开发者');
@@ -63,11 +64,24 @@ chrome.storage.sync.get(['recordsGroupMap', 'recentlyViewedCount'], (data) => {
                 const recentlyViewedCount = data.recentlyViewedCount;
                 const updatedGroups = data.recordsGroupMap[recordsGroupMapType].map(group => {
                     if (group.BVCode === currentBV) {
-                        const newRecords = [record, ...group.records].slice(0, recentlyViewedCount);
+                        const existingRecords = group.records;
+                        const lastRecordIndex = existingRecords.findIndex(r => r.url === recordUrl);
+
+                        let newRecords;
+                        if (lastRecordIndex !== -1) {
+                            // 同一视频：覆盖最近一次记录
+                            newRecords = [...existingRecords];
+                            newRecords[lastRecordIndex] = newRecord;
+                        } else {
+                            // 新视频：添加到开头并截断
+                            newRecords = [newRecord, ...existingRecords].slice(0, recentlyViewedCount);
+                        }
+
                         return { ...group, records: newRecords };
                     }
                     return group;
                 });
+
 
                 chrome.storage.sync.set({
                     recordsGroupMap: {

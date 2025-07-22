@@ -5,6 +5,7 @@ const notification = document.getElementById('notification');
 const errorMessage = document.getElementById('errorMessage');
 const recordCountInput = document.getElementById('recordCount');
 const saveSettingBtn = document.getElementById('saveSetting');
+const clearCacheBtn = document.getElementById('clearCache');
 
 // 数据结构
 // 控制页面内容
@@ -476,3 +477,19 @@ function onDrop(e, group, index) {
     onDragEnd();
     return false;
 }
+
+// 清除缓存按钮事件
+clearCacheBtn.addEventListener('click', () => {
+    if (confirm('确定要清空所有存储数据吗？此操作不可撤销。')) {
+        chrome.storage.sync.clear(() => {
+            recordsGroupMap = { "recordsGroupListSpecial": [], "recordsGroupListNormal": [] };
+            expandedGroups = {};
+            recentlyViewedCount = 3; // 重置默认值
+            loadData();
+            showNotification('所有存储数据已清空！');
+        });
+        recordCountInput.value = 3;
+        // 刷新插件
+        chrome.runtime.reload();
+    }
+});
