@@ -463,6 +463,12 @@ async function getCollectionInfo(BVCode) {
 document.addEventListener('DOMContentLoaded', () => {
     loadData();
 
+    // 初始化chrome.storage内容
+    if (!recentlyViewedCount) {
+        recentlyViewedCount = 3; // 设置默认值
+        chrome.storage.sync.set({ recentlyViewedCount });
+    }
+
     // 类型选择器功能
     const specialOption = document.getElementById('specialOption');
     const normalOption = document.getElementById('normalOption');
