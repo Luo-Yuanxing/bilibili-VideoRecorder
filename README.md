@@ -8,10 +8,11 @@
 
 ### 说明
 特殊合集：
-- 目前仅支持BV号相同的视频合集，具体视频为同一BV号下不同分P，例如[https://www.bilibili.com/video/BV1ps4y1d73V/?p=61](https://www.bilibili.com/video/BV1ps4y1d73V/?spm_id_from=333.788.videopod.sections&vd_source=149d3dc03b60b6fd7822edc452305a7c&p=61) 中p=61为第61个视频
+- 视频为同一BV号下不同分P，例如[https://www.bilibili.com/video/BV1ps4y1d73V/?p=61](https://www.bilibili.com/video/BV1ps4y1d73V/?spm_id_from=333.788.videopod.sections&vd_source=149d3dc03b60b6fd7822edc452305a7c&p=61) 中p=61为第61个视频
+- 可以看作二次聚合
 
 一般合集：
-- 一般的合集各个视频有不同的BV号，此功能正在开发中
+- 一般的合集各个视频有不同的BV号
 
 ### 扩展界面预览
 <img src="screenshot.png" alt="扩展界面预览" style="width:50%;" />

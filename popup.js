@@ -15,7 +15,13 @@ let info = { "local": [{ "recordsGroupListSpecial": "特殊记录组", "recordsG
             title: title,
             BVCode: BVCode,
             records: []
-        }] */
+        }] 
+    recordsGroupListNormal 结构为 [{
+            title: title,
+            sid: sid,
+            spaceId: spaceId,
+            records: []
+        }]*/
 let recordsGroupMap = { "recordsGroupListSpecial": [], "recordsGroupListNormal": [] };
 let recordsContent = [];
 let expandedGroups = {};
@@ -97,7 +103,7 @@ function renderRecordGroups() {
                     <path d="M8 16H16" stroke="#99a2aa" stroke-width="2" stroke-linecap="round"/>
                     </svg>
                 </div>
-                    <h3 class="record-title">${recordCard.title}</h3>
+                    ${recordCard.upName ? `<span class="record-title">${recordCard.upName} - ${recordCard.title}</span>` : `<span class="record-title">${recordCard.title}</span>`}
                 </div>
 
                 <div class="record-bv">
@@ -105,7 +111,7 @@ function renderRecordGroups() {
                 <path d="M9 17V7L17 12L9 17Z" fill="currentColor"/>
                 <path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                 </svg>
-                <span>${recordCard.BVCode}</span>
+                ${recordCard.sid ? `<span class="record-bvcode">SID: ${recordCard.sid}</span>` : `<span class="record-bvcode">BV: ${recordCard.BVCode}</span>`}
                 </div>
 
                 <div class="watch-records ${isExpanded ? 'expanded' : ''}">
@@ -216,31 +222,39 @@ function hideError() {
 }
 
 // 检测是否是特殊合集类型
-// 检测url中参数p=1于p=2页面的title是否相同，相同则是特殊合集，不同则是普通视频
+// 检测url中参数p=1于p=2页面的title是否相同，相同则是普通合集，不同则是特殊合集
 async function isSpecialCollection(BVCode) {
-    const url1 = `https://www.bilibili.com/video/${BVCode}?p=1`;
-    const url2 = `https://www.bilibili.com/video/${BVCode}?p=2`;
-
-    // 使用Promise.all并行请求提高效率
-    return Promise.all([
-        fetch(url1).then(res => res.ok ? res.text() : Promise.reject('p1请求失败')),
-        fetch(url2).then(res => res.ok ? res.text() : Promise.reject('p2请求失败'))
-    ])
-        .then(([html1, html2]) => {
-            // 使用DOMParser确保更可靠的标题解析
-            const getTitle = html => {
-                const parser = new DOMParser();
-                const doc = parser.parseFromString(html, 'text/html');
-                return doc.querySelector('h1').textContent.trim();
-            };
-
-            return getTitle(html1) === getTitle(html2);
-        })
-        .catch(error => {
-            console.error('检测失败:', error);
-            return false; // 失败时默认按普通视频处理
-        });
+    const url = `https://www.bilibili.com/video/${BVCode}`;
+    try {
+        const res = await fetch(url);
+        if (!res.ok) {
+            throw new Error('视频请求失败');
+        }
+        const html = await res.text();
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+        const video_pod__item = doc.querySelector('.video-pod__item');
+        if (!video_pod__item) {
+            // 单视频页面，不是特殊合集
+            return false;
+        }
+        if (video_pod__item.getAttribute('data-key') !== BVCode) {
+            // 视频与BV号不匹配
+            return false;
+        }
+        if (video_pod__item.querySelector('.page-list')) {
+            // 有多P页面，可能是特殊合集
+            return true;
+        } else {
+            // 普通合集
+            return false;
+        }
+    } catch (error) {
+        console.error('检测失败:', error);
+        return false;
+    }
 }
+
 // 添加新记录组 -- 特殊合集
 async function addNewRecordGroupForSpecial() {
 
@@ -299,6 +313,133 @@ async function addNewRecordGroupForSpecial() {
     }
 }
 
+// 添加新记录组 -- 普通合集
+async function addNewRecordGroupForNormal() {
+    const BVCode = BVCodeInput.value.trim();
+
+    if (!BVCode) {
+        showError('请输入BV号');
+        return;
+    }
+
+    // 校验BV号格式
+    if (!/^BV\w{10}$/i.test(BVCode)) {
+        showError('BV号格式不正确，格式应为BV后跟10位字母数字');
+        return;
+    }
+
+    // 显示加载状态
+    const oldBtnText = saveBtn.innerHTML;
+    saveBtn.innerHTML = '<div class="spinner"></div>';
+    saveBtn.disabled = true;
+
+    try {
+        // 检验是否为普通合集
+        const isSpecial = await isSpecialCollection(BVCode);
+        if (isSpecial) {
+            throw new Error('该BV号是特殊合集，请使用特殊合集功能添加');
+        }
+
+        // 获取合集信息
+        /**
+         * collectionInfo =
+        {
+            sid: sid,
+            spaceId: spaceId,
+            title: title,
+            upName: upName,
+        };
+         */
+        const collectionInfo = await getCollectionInfo(BVCode);
+        if (!collectionInfo) {
+            throw new Error('获取合集信息失败，请检查BV号是否正确');
+        }
+
+        recordsGroupMap['recordsGroupListNormal'].push({
+            sid: collectionInfo.sid,
+            spaceId: collectionInfo.spaceId,
+            title: collectionInfo.title,
+            upName: collectionInfo.upName,
+            records: []
+        });
+
+        BVCodeInput.value = '';
+        saveData();
+        showNotification('记录组已成功添加！');
+
+    } catch (error) {
+        showError(error.message);
+        console.error('获取合集信息失败:', error);
+    }
+    finally {
+        // 恢复按钮状态
+        saveBtn.innerHTML = oldBtnText;
+        saveBtn.disabled = false;
+    }
+
+
+}
+
+async function getCollectionInfo(BVCode) {
+    const url = `https://www.bilibili.com/video/${BVCode}`;
+    try {
+        const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error('视频请求失败');
+        }
+        const html = await response.text();
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+        const collectionElement = doc.querySelector('.video-pod__header .header-top .left a');
+        if (!collectionElement) {
+            throw new Error('未找到合集链接');
+        }
+        // https://space.bilibili.com/1837617/channel/collectiondetail?sid=127155&spm_id_from=333.788.0.0
+        const sidMatch = collectionElement.href.match(/sid=(\d+)/);
+        if (!sidMatch) {
+            throw new Error('合集SID未找到');
+        }
+        const sid = sidMatch[1];
+        // 获取空间ID：1837617
+        const spaceIdMatch = collectionElement.href.match(/space.bilibili.com\/(\d+)/);
+        if (!spaceIdMatch) {
+            throw new Error('空间ID未找到');
+        }
+        const spaceId = spaceIdMatch[1];
+
+        // 获取title a.textContent
+        const title = collectionElement.textContent.trim();
+        if (!title) {
+            throw new Error('合集标题未找到');
+        }
+
+        // 请求up名字
+        const spaceResponse = await fetch(`https://space.bilibili.com/${spaceId}`);
+        if (!spaceResponse.ok) {
+            throw new Error('UP主信息请求失败');
+        }
+        const spaceHtml = await spaceResponse.text();
+        const spaceDoc = new DOMParser().parseFromString(spaceHtml, 'text/html');
+        const upNameElement = spaceDoc.querySelector('title');
+        if (!upNameElement) {
+            throw new Error('UP主名称未找到');
+        }
+        // e.g. 薄海纸鱼的个人空间-薄海纸鱼个人主页-哔哩哔哩视频
+        const upName = upNameElement.textContent.split('-')[0].trim().replace(/的个人空间|个人主页|视频/g, '').trim();
+
+        return {
+            sid: sid,
+            spaceId: spaceId,
+            title: title,
+            upName: upName,
+        };
+    } catch (error) {
+        console.error('获取合集信息失败:', error);
+        return null;
+    }
+
+}
+
 // 初始化和事件监听
 document.addEventListener('DOMContentLoaded', () => {
     loadData();
@@ -328,8 +469,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (selectedType === 'special') {
             addNewRecordGroupForSpecial();
-        } else {
-            // TODO: addNewRecordGroupForNormal();
+        } else if (selectedType === 'normal') {
+            addNewRecordGroupForNormal();
         }
     });
 
