@@ -227,7 +227,6 @@ function hideError() {
 }
 
 // 检测是否是特殊合集类型
-// 检测url中参数p=1于p=2页面的title是否相同，相同则是普通合集，不同则是特殊合集
 async function isSpecialCollection(BVCode) {
     const url = `https://www.bilibili.com/video/${BVCode}`;
     try {
@@ -238,13 +237,21 @@ async function isSpecialCollection(BVCode) {
         const html = await res.text();
         const parser = new DOMParser();
         const doc = parser.parseFromString(html, 'text/html');
-        const video_pod__item = doc.querySelector('.video-pod__item');
-        if (!video_pod__item) {
+        const video_pod__items = doc.querySelectorAll('.video-pod__item');
+        let video_pod__item = null;
+        if (!video_pod__items) {
             // 单视频页面，不是特殊合集
             return false;
         }
-        if (video_pod__item.getAttribute('data-key') !== BVCode) {
-            // 视频与BV号不匹配
+        // 匹配BV号
+        for (const item of video_pod__items) {
+            if (item.getAttribute('data-key') === BVCode) {
+                video_pod__item = item;
+                break;
+            }
+        }
+        if (!video_pod__item) {
+            // 查询不到匹配的BV号
             return false;
         }
         if (video_pod__item.querySelector('.page-list')) {
