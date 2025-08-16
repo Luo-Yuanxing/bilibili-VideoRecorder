@@ -4,6 +4,10 @@
 let progressInterval = null;
 
 async function main() {
+
+    // log
+    console.log('main函数已执行，开始处理B站视频页面');
+
     // 清理之前的定时器
     if (progressInterval) {
         clearInterval(progressInterval);
@@ -98,7 +102,10 @@ async function main() {
                             if (group.BVCode === currentBV) {
                                 const existingRecords = group.records;
                                 const lastRecordIndex = existingRecords.findIndex(r => r.url === newRecord.url);
-
+                                // 还需保证p相同
+                                if (lastRecordIndex !== -1 && getPParam(existingRecords[lastRecordIndex].url) !== getPParam(newRecord.url)) {
+                                    lastRecordIndex = -1; // 如果p不同，则视为新视频
+                                }
                                 let newRecords;
                                 if (lastRecordIndex !== -1) {
                                     // 同一视频：覆盖最近一次记录
@@ -133,6 +140,14 @@ async function main() {
                     return group;
                 });
 
+                // 处理实际存储数据大于recentlyViewedCount的情况，删除多余记录
+                updatedGroups.map(group => {
+                    if (group.records.length > recentlyViewedCount) {
+                        group.records = group.records.slice(0, recentlyViewedCount);
+                    }
+                    return group;
+                });
+
                 chrome.storage.sync.set({
                     recordsGroupMap: {
                         ...data.recordsGroupMap,
@@ -145,23 +160,45 @@ async function main() {
     });
 }
 
-// 检查是否已执行
+// 初始设置
+let lastLocation = window.location.href; // 存储完整URL以检测参数变化
+
+function checkLocationChange() {
+    const currentLocation = window.location.href;
+    if (currentLocation !== lastLocation) {
+        lastLocation = currentLocation; // 更新存储的URL
+        main(); // 执行页面更新
+    }
+}
+
+// DOM就绪检查
 if (document.readyState === 'complete' || document.readyState === 'interactive') {
     main();
     handleData();
 } else {
-    document.addEventListener('DOMContentLoaded', main); // 添加监听
-    document.addEventListener('DOMContentLoaded', handleData); // 添加监听
+    document.addEventListener('DOMContentLoaded', main);
+    document.addEventListener('DOMContentLoaded', handleData);
 }
-// 添加SPA路由变化监听
-let lastPath = window.location.pathname;
-const observer = new MutationObserver(() => {
-    if (window.location.pathname !== lastPath) {
-        lastPath = window.location.pathname;
-        main(); // 路径变化时重新执行
-    }
-});
+
+// 增强的路由监听
+const observer = new MutationObserver(checkLocationChange);
 observer.observe(document.body, { childList: true, subtree: true });
+
+// 额外添加历史事件监听（针对浏览器前进/后退）
+window.addEventListener('popstate', checkLocationChange);
+
+// 处理手动URL变更（如pushState/replaceState）
+const originalPushState = history.pushState;
+history.pushState = function () {
+    originalPushState.apply(this, arguments);
+    setTimeout(checkLocationChange, 50); // 异步确保DOM更新完成
+};
+
+const originalReplaceState = history.replaceState;
+history.replaceState = function () {
+    originalReplaceState.apply(this, arguments);
+    setTimeout(checkLocationChange, 50);
+};
 
 // 拷贝popup.js中的isSpecialCollection函数
 async function isSpecialCollection(BVCode) {
@@ -232,11 +269,20 @@ function formatUrl(url, type) {
     const urlFormat = new URL(url);
     urlFormat.search = '';
 
-    if (type === "recordsGroupMapTypeSpecial") {
-        const urlParams = new URLSearchParams(url);
-        const p = urlParams.get('p');
-        if (p) urlFormat.searchParams.set('p', p);
+    if (type === "recordsGroupListSpecial") {
+        const p = getPParam(url);
+        urlFormat.searchParams.set('p', p);
     }
 
     return urlFormat.toString();
+}
+
+function getPParam(urlStr) {
+    try {
+        const url = new URL(urlStr);
+        const pParam = url.searchParams.get('p') || '1'; // 无p参数默认为1
+        return pParam;
+    } catch (e) {
+        return '1'; // URL解析失败时返回默认值
+    }
 }
