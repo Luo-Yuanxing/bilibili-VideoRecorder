@@ -224,6 +224,18 @@ async function isSpecialCollection(BVCode) {
                 break;
             }
         }
+        
+        // 检查是否全部为simple-base-item
+        let is_all_simple_base_item = true;
+        for (const item of video_pod__items) {
+            if (!item.classList.contains('simple-base-item')) {
+                is_all_simple_base_item = false;
+            }
+        }
+        if (is_all_simple_base_item) {
+            return true;
+        }
+        
         if (!video_pod__item) {
             // 查询不到匹配的BV号
             return false;
