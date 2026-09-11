@@ -259,7 +259,7 @@ function handleData() {
     if (video) {
         console.log('视频页面脚本已注入');
     } else {
-        console.warn('未检测到视频元素，脚本可能未正确注入');
+        console.log('未检测到视频元素，脚本可能未正确注入');
     }
     chrome.storage.sync.get(['lastClickedLink'], (data) => {
         if (data.lastClickedLink) {
