@@ -6,6 +6,7 @@ const errorMessage = document.getElementById('errorMessage');
 const recordCountInput = document.getElementById('recordCount');
 const saveSettingBtn = document.getElementById('saveSetting');
 const clearCacheBtn = document.getElementById('clearCache');
+document.getElementById('version').textContent = chrome.runtime.getManifest().version;
 
 const GROUP_CONFIG = [
     { id: 'seasonsArchivesList', seasonType: 'seasons_archives', title: 'seasons_archives 合集' },
