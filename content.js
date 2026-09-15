@@ -2,6 +2,15 @@
 
 // 添加全局变量管理定时器
 let progressInterval = null;
+let routeGeneration = 0;
+let restoreGeneration = 0;
+
+function stopTracking() {
+    if (progressInterval !== null) {
+        clearInterval(progressInterval);
+        progressInterval = null;
+    }
+}
 
 async function main() {
 
@@ -9,25 +18,31 @@ async function main() {
     console.log('main函数已执行，开始处理B站视频页面');
 
     // 清理之前的定时器
-    if (progressInterval) {
-        clearInterval(progressInterval);
-        progressInterval = null;
-    }
+    stopTracking();
+    const currentGeneration = ++routeGeneration;
 
     const currentBV = window.location.pathname.split('/')[2];
     if (!currentBV) return;
 
     const isSpecial = await isSpecialCollection(currentBV);
+    if (currentGeneration !== routeGeneration) return;
     const recordsGroupMapType = isSpecial ? "recordsGroupListSpecial" : "recordsGroupListNormal";
 
-    chrome.storage.sync.get(['recordsGroupMap', 'recentlyViewedCount'], (data) => {
-        const { recordsGroupMap, recentlyViewedCount } = data;
+    storageGet(recordsStorage, ['recordsGroupMap']).then(data => {
+        return storageGet(chrome.storage.sync, ['recordsGroupMap', 'recentlyViewedCount']).then(settings => ({
+            recordsGroupMap: data.recordsGroupMap ?? settings.recordsGroupMap,
+            recentlyViewedCount: settings.recentlyViewedCount
+        }));
+    }).then((data) => {
+        if (currentGeneration !== routeGeneration) return;
+        const recordsGroupMap = normalizeRecordsGroupMap(data.recordsGroupMap);
+        const recentlyViewedCount = normalizeRecentlyViewedCount(data.recentlyViewedCount);
 
         // 1. 找到匹配的卡片
         let matchedGroup;
         if (recordsGroupMapType === "recordsGroupListSpecial") {
             // 查询BVCord
-            matchedGroup = data.recordsGroupMap[recordsGroupMapType].find(group => group.BVCode === currentBV);
+            matchedGroup = recordsGroupMap[recordsGroupMapType].find(group => group && group.BVCode === currentBV);
             if (!matchedGroup) {
                 // 如果没有找到，可能是特殊合集但未记录
                 console.log(`未找到匹配的记录组: ${currentBV}`);
@@ -44,7 +59,7 @@ async function main() {
                 return;
             }
             const currentSID = sidMatch[1];
-            matchedGroup = data.recordsGroupMap[recordsGroupMapType].find(group => group.sid === currentSID);
+            matchedGroup = recordsGroupMap[recordsGroupMapType].find(group => group && group.sid === currentSID);
             if (!matchedGroup) {
                 // 如果没有找到，可能是普通合集但未记录
                 console.log(`未找到匹配的记录组: ${currentBV}`);
@@ -54,11 +69,17 @@ async function main() {
 
         if (matchedGroup) {
             // 2. 监听播放行为
-            const isContextValid = () => !!chrome.runtime?.id;
             progressInterval = setInterval(() => {
+                if (currentGeneration !== routeGeneration) {
+                    stopTracking();
+                    return;
+                }
 
                 const video = document.querySelector('video');
                 if (!video) return;
+
+                const duration = Number(video.duration);
+                if (!Number.isFinite(duration) || duration <= 0 || !Number.isFinite(video.currentTime)) return;
 
                 // 2.1 获取视频名称
                 const video_pod__body = document.querySelectorAll('.video-pod__body .active');
@@ -71,11 +92,11 @@ async function main() {
                 // 2.2 编辑url，删除无关查询参数
                 const currentUrl = formatUrl(window.location.href, recordsGroupMapType);
 
-                const progress = Math.floor((video.currentTime / video.duration) * 100);
+                const progress = Math.max(0, Math.min(100, Math.floor((video.currentTime / duration) * 100)));
 
                 // 若视频剩余时间不足30秒，则删除getProgressInterval
                 if (video.duration - video.currentTime < 30) {
-                    clearInterval(progressInterval);
+                    stopTracking();
                     console.log('视频剩余时间不足30秒，停止记录进度');
                 }
 
@@ -85,23 +106,19 @@ async function main() {
                     url: currentUrl,
                     timestamp: new Date().toISOString(),
                     progress,
-                    duration: video.duration
+                    duration
                 };
 
                 // 4. 更新存储（保留最近recentlyViewedCount 条）
-                if (!recentlyViewedCount) {
-                    // 获取不到让插件崩溃
-                    alert('无法获取设置中"最近观看记录数量"，请在设置界面保存设置，或联系开发者');
-                    throw new Error('无法获取最近观看记录数量');
-                }
-                const updatedGroups = recordsGroupMap[recordsGroupMapType].map(group => {
+                enqueueRecordsGroupMapUpdate(latestMap => {
+                    const updatedGroups = latestMap[recordsGroupMapType].map(group => {
                     const identifier = isSpecial ? currentBV : matchedGroup.sid;
                     if ((isSpecial && group.BVCode === identifier) ||
                         (!isSpecial && group.sid === identifier)) {
                         if (isSpecial) {
                             if (group.BVCode === currentBV) {
                                 const existingRecords = group.records;
-                                const lastRecordIndex = existingRecords.findIndex(r => r.url === newRecord.url);
+                                let lastRecordIndex = existingRecords.findIndex(r => r.url === newRecord.url);
                                 // 还需保证p相同
                                 if (lastRecordIndex !== -1 && getPParam(existingRecords[lastRecordIndex].url) !== getPParam(newRecord.url)) {
                                     lastRecordIndex = -1; // 如果p不同，则视为新视频
@@ -140,24 +157,21 @@ async function main() {
                     return group;
                 });
 
-                // 处理实际存储数据大于recentlyViewedCount的情况，删除多余记录
-                updatedGroups.map(group => {
+                    // 处理实际存储数据大于recentlyViewedCount的情况，删除多余记录
+                    updatedGroups.forEach(group => {
                     if (group.records.length > recentlyViewedCount) {
                         group.records = group.records.slice(0, recentlyViewedCount);
                     }
-                    return group;
                 });
-
-                chrome.storage.sync.set({
-                    recordsGroupMap: {
-                        ...data.recordsGroupMap,
+                    return {
+                        ...latestMap,
                         [recordsGroupMapType]: updatedGroups
-                    }
-                });
+                    };
+                }).catch(error => console.error('保存观看记录失败:', error));
                 console.log(`已更新${recordsGroupMapType}记录组`);
             }, 30000);
         }
-    });
+    }).catch(error => console.error('读取观看记录失败:', error));
 }
 
 // 初始设置
@@ -200,59 +214,6 @@ history.replaceState = function () {
     setTimeout(checkLocationChange, 50);
 };
 
-// 拷贝popup.js中的isSpecialCollection函数
-async function isSpecialCollection(BVCode) {
-    const url = `https://www.bilibili.com/video/${BVCode}`;
-    try {
-        const res = await fetch(url);
-        if (!res.ok) {
-            throw new Error('视频请求失败');
-        }
-        const html = await res.text();
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(html, 'text/html');
-        const video_pod__items = doc.querySelectorAll('.video-pod__item');
-        let video_pod__item = null;
-        if (!video_pod__items) {
-            // 单视频页面，不是特殊合集
-            return false;
-        }
-        // 匹配BV号
-        for (const item of video_pod__items) {
-            if (item.getAttribute('data-key') === BVCode) {
-                video_pod__item = item;
-                break;
-            }
-        }
-        
-        // 检查是否全部为simple-base-item
-        let is_all_simple_base_item = true;
-        for (const item of video_pod__items) {
-            if (!item.classList.contains('simple-base-item')) {
-                is_all_simple_base_item = false;
-            }
-        }
-        if (is_all_simple_base_item) {
-            return true;
-        }
-        
-        if (!video_pod__item) {
-            // 查询不到匹配的BV号
-            return false;
-        }
-        if (video_pod__item.querySelector('.page-list')) {
-            // 有多P页面，可能是特殊合集
-            return true;
-        } else {
-            // 普通合集
-            return false;
-        }
-    } catch (error) {
-        console.error('检测失败:', error);
-        return false;
-    }
-}
-
 function handleData() {
     // 确保脚本在页面加载后执行
     const video = document.querySelector('video');
@@ -261,20 +222,33 @@ function handleData() {
     } else {
         console.log('未检测到视频元素，脚本可能未正确注入');
     }
-    chrome.storage.sync.get(['lastClickedLink'], (data) => {
-        if (data.lastClickedLink) {
+    const currentRestoreGeneration = ++restoreGeneration;
+    storageGet(chrome.storage.sync, ['lastClickedLink']).then(data => {
+        if (currentRestoreGeneration !== restoreGeneration || !data.lastClickedLink) return;
+        const link = data.lastClickedLink;
+        if (window.location.href === link.url) {
             console.log('最后点击的链接:', data.lastClickedLink);
-            // 判断是否为lastClickedLink.url的页面
-            if (window.location.href === data.lastClickedLink.url) {
-                // 如果是，设置视频进度
-                const video = document.querySelector('video');
-                if (video && data.lastClickedLink.progress) {
-                    video.currentTime = (data.lastClickedLink.progress / 100) * video.duration - 5; // 减5秒，避免跳转到最后
-                    console.log(`视频进度已设置为: ${data.lastClickedLink.progress}%`);
-                }
-            }
+            restoreVideoProgress(link, currentRestoreGeneration);
         }
-    });
+    }).catch(error => console.error('读取恢复进度失败:', error));
+}
+
+function restoreVideoProgress(link, generation) {
+    const applyProgress = () => {
+        if (generation !== restoreGeneration) return;
+        const video = document.querySelector('video');
+        const progress = Number(link.progress);
+        if (!video || !Number.isFinite(video.duration) || video.duration <= 0 || !Number.isFinite(progress)) return false;
+        const target = Math.max(0, Math.min(video.duration, video.duration * Math.max(0, Math.min(100, progress)) / 100 - 5));
+        video.currentTime = target;
+        console.log(`视频进度已设置为: ${progress}%`);
+        storageSet(chrome.storage.sync, { lastClickedLink: null }).catch(error => console.error('清理恢复进度失败:', error));
+        return true;
+    };
+
+    if (applyProgress()) return;
+    const video = document.querySelector('video');
+    if (video) video.addEventListener('loadedmetadata', applyProgress, { once: true });
 }
 
 function formatUrl(url, type) {

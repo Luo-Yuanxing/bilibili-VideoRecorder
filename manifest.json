@@ -9,14 +9,6 @@
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   },
-  
-  // 后台脚本（持久化事件处理）
-  "background": {
-    "service_worker": "background.js",
-    "type": "module"
-  },
-  
-  // 用户界面组件
   "action": {
     "default_popup": "popup.html",
     "default_icon": {
@@ -24,17 +16,16 @@
       "32": "icons/icon32.png"
     }
   },
-  "options_page": "options.html",
-  
-  // 内容脚本（注入网页）
   "content_scripts": [{
     "matches": ["*://*.bilibili.com/*"],
-    "js": ["content.js"],
+    "js": ["shared.js", "content.js"],
     "css": ["content.css"],
     "run_at": "document_idle"
   }],
-  
-  // 权限声明
-  "permissions": ["storage", "activeTab", "tabs"],
-  "host_permissions": ["*://*.bilibili.com/*"]
+  "permissions": ["storage"],
+  "host_permissions": [
+    "https://*.bilibili.com/*",
+    "https://space.bilibili.com/*",
+    "https://api.bilibili.com/*"
+  ]
 }
