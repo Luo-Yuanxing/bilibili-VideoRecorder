@@ -37,14 +37,10 @@ let dragSourceGroup = null;
 function loadData() {
     Promise.all([
         loadSeasonsMap(),
-        storageGet(chrome.storage.sync, ['seasonsMap', 'recentlyViewedCount', 'lastClickedLink'])
+        storageGet(chrome.storage.sync, ['recentlyViewedCount', 'lastClickedLink'])
     ]).then(([storedSeasonsMap, settings]) => {
-        const data = {
-            ...settings,
-            seasonsMap: storedSeasonsMap ?? settings.seasonsMap
-        };
-        seasonsMap = normalizeSeasonsMap(data.seasonsMap);
-        recentlyViewedCount = normalizeRecentlyViewedCount(data.recentlyViewedCount);
+        seasonsMap = normalizeSeasonsMap(storedSeasonsMap);
+        recentlyViewedCount = normalizeRecentlyViewedCount(settings.recentlyViewedCount);
         recordCountInput.value = recentlyViewedCount;
         initRecordGroups();
         renderRecordGroups();

@@ -6,10 +6,9 @@ const DEFAULT_SEASONS_MAP = {
 const seasonsStorage = chrome.storage.local;
 let seasonsWriteQueue = Promise.resolve();
 const SEASONS_STORAGE_VERSION = 2;
-const SEASONS_STORAGE_INDEX_KEY = 'seasons:v2:index';
-const SEASONS_STORAGE_PREFIX = 'seasons:v2:season:';
-const LEGACY_RECORDS_STORAGE_INDEX_KEY = 'records:v1:index';
-const LEGACY_RECORDS_STORAGE_PREFIX = 'records:v1:group:';
+const SEASONS_STORAGE_NAMESPACE = `seasons:v${SEASONS_STORAGE_VERSION}`;
+const SEASONS_STORAGE_INDEX_KEY = `${SEASONS_STORAGE_NAMESPACE}:index`;
+const SEASONS_STORAGE_PREFIX = `${SEASONS_STORAGE_NAMESPACE}:season:`;
 const RECORDS_CHUNK_MAX_BYTES = 6000;
 
 function storageGet(area, keys) {
@@ -53,6 +52,11 @@ function storageRemove(area, keys) {
 
 function normalizeRecentlyViewedCount(value) {
     return Number.isInteger(value) && value >= 1 && value <= 50 ? value : 3;
+}
+
+function isCurrentSeasonsIndex(index) {
+    return index?.version === SEASONS_STORAGE_VERSION
+        && Object.keys(DEFAULT_SEASONS_MAP).every(seasonType => Array.isArray(index[seasonType]));
 }
 
 async function fetchTextWithTimeout(url, { timeoutMs = 8000, headers = {} } = {}) {
@@ -110,13 +114,13 @@ function normalizeSeasonsMap(value) {
     const normalizeGroups = groups => Array.isArray(groups)
         ? groups.filter(group => group && typeof group === 'object').map(group => ({
             ...group,
-            videos: Array.isArray(group.videos) ? group.videos : (Array.isArray(group.records) ? group.records : [])
+            videos: Array.isArray(group.videos) ? group.videos : []
         }))
         : [];
 
     return {
-        seasons_archives: normalizeGroups(value.seasons_archives ?? value.recordsGroupListSpecial),
-        seasons_series: normalizeGroups(value.seasons_series ?? value.recordsGroupListNormal)
+        seasons_archives: normalizeGroups(value.seasons_archives),
+        seasons_series: normalizeGroups(value.seasons_series)
     };
 }
 
@@ -180,47 +184,41 @@ function splitRecordChunks(records) {
 }
 
 async function loadSeasonsMap() {
-    const indexData = await storageGet(seasonsStorage, [SEASONS_STORAGE_INDEX_KEY, LEGACY_RECORDS_STORAGE_INDEX_KEY, 'recordsGroupMap', 'seasonsMap']);
-    const index = indexData[SEASONS_STORAGE_INDEX_KEY];
-
-    if (!index || index.version !== SEASONS_STORAGE_VERSION) {
-        const legacyIndex = indexData[LEGACY_RECORDS_STORAGE_INDEX_KEY];
-        if (legacyIndex?.version === 1) {
-            const legacyMap = await loadStoredSeasonsMap(legacyIndex, LEGACY_RECORDS_STORAGE_PREFIX, ['recordsGroupListSpecial', 'recordsGroupListNormal'], 'records');
-            await writeSeasonsMap(legacyMap, null);
-            return legacyMap;
-        }
-        const legacyMap = normalizeSeasonsMap(indexData.recordsGroupMap);
-        if (indexData.recordsGroupMap) await writeSeasonsMap(legacyMap, null);
-        return legacyMap;
+    const index = (await storageGet(seasonsStorage, [SEASONS_STORAGE_INDEX_KEY]))[SEASONS_STORAGE_INDEX_KEY];
+    if (!index) return { ...DEFAULT_SEASONS_MAP };
+    if (index.version !== SEASONS_STORAGE_VERSION) {
+        throw new Error(`不支持的数据存储版本：${index.version}`);
+    }
+    if (!isCurrentSeasonsIndex(index)) {
+        throw new Error('当前数据存储版本的索引格式无效');
     }
 
-    return loadStoredSeasonsMap(index, SEASONS_STORAGE_PREFIX, ['seasons_archives', 'seasons_series']);
+    return loadStoredSeasonsMap(index);
 }
 
-async function loadStoredSeasonsMap(index, storagePrefix, seasonTypes, videoKey = 'videos') {
+async function loadStoredSeasonsMap(index) {
+    const seasonTypes = Object.keys(DEFAULT_SEASONS_MAP);
     const seasonIds = seasonTypes.flatMap(seasonType => index[seasonType] || []);
-    const metadataKeys = seasonIds.map(seasonId => getSeasonStorageKeys(seasonId, storagePrefix, videoKey).meta);
+    const metadataKeys = seasonIds.map(seasonId => getSeasonStorageKeys(seasonId).meta);
     const metadata = await storageGet(seasonsStorage, metadataKeys);
     const chunkKeys = seasonIds.flatMap(seasonId => {
-        const seasonIndex = metadata[getSeasonStorageKeys(seasonId, storagePrefix, videoKey).meta];
+        const seasonIndex = metadata[getSeasonStorageKeys(seasonId).meta];
         const chunkCount = Number.isInteger(seasonIndex?.chunkCount) ? seasonIndex.chunkCount : 0;
-        const { chunks } = getSeasonStorageKeys(seasonId, storagePrefix, videoKey);
+        const { chunks } = getSeasonStorageKeys(seasonId);
         return Array.from({ length: chunkCount }, (_, chunkIndex) => `${chunks}${chunkIndex}`);
     });
     const chunks = chunkKeys.length ? await storageGet(seasonsStorage, chunkKeys) : {};
     const result = { ...DEFAULT_SEASONS_MAP };
 
-    seasonTypes.forEach((seasonType, seasonTypeIndex) => {
-        const targetSeasonType = seasonTypes.length === 2 && seasonTypeIndex === 0 ? 'seasons_archives' : 'seasons_series';
+    seasonTypes.forEach(seasonType => {
         (index[seasonType] || []).forEach(seasonId => {
-            const { meta, chunks: chunkPrefix } = getSeasonStorageKeys(seasonId, storagePrefix, videoKey);
+            const { meta, chunks: chunkPrefix } = getSeasonStorageKeys(seasonId);
             const seasonIndex = metadata[meta];
             if (!seasonIndex?.group || typeof seasonIndex.group !== 'object') return;
             const videos = Array.from({ length: seasonIndex.chunkCount || 0 }, (_, chunkIndex) => chunks[`${chunkPrefix}${chunkIndex}`])
                 .flat()
                 .filter(record => record && typeof record === 'object');
-            result[targetSeasonType].push({ ...seasonIndex.group, videos });
+            result[seasonType].push({ ...seasonIndex.group, videos });
         });
     });
     return normalizeSeasonsMap(result);
@@ -253,7 +251,7 @@ async function writeSeasonsMap(seasonsMap, previousIndex) {
     if (Object.keys(values).length) await storageSet(seasonsStorage, values);
     await storageSet(seasonsStorage, { [SEASONS_STORAGE_INDEX_KEY]: nextIndex });
 
-    const oldSeasonIds = currentIndex?.version === SEASONS_STORAGE_VERSION
+    const oldSeasonIds = isCurrentSeasonsIndex(currentIndex)
         ? [...(currentIndex.seasons_archives || []), ...(currentIndex.seasons_series || [])]
         : [];
     const staleKeys = oldSeasonIds.flatMap(seasonId => {
@@ -272,7 +270,6 @@ async function writeSeasonsMap(seasonsMap, previousIndex) {
         });
         await storageRemove(seasonsStorage, [...staleKeys, ...staleChunkKeys]);
     }
-    if (currentIndex?.version !== SEASONS_STORAGE_VERSION) await storageRemove(seasonsStorage, ['recordsGroupMap', LEGACY_RECORDS_STORAGE_INDEX_KEY]);
 }
 
 function enqueueSeasonsMapUpdate(update) {

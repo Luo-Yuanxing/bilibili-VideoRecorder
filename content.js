@@ -29,9 +29,9 @@ async function main() {
     const seasonType = isSpecial ? 'seasons_archives' : 'seasons_series';
 
     loadSeasonsMap().then(async storedSeasonsMap => {
-        const settings = await storageGet(chrome.storage.sync, ['seasonsMap', 'recentlyViewedCount']);
+        const settings = await storageGet(chrome.storage.sync, ['recentlyViewedCount']);
         return ({
-            seasonsMap: storedSeasonsMap ?? settings.seasonsMap,
+            seasonsMap: storedSeasonsMap,
             recentlyViewedCount: settings.recentlyViewedCount
         });
     }).then((data) => {
