@@ -112,6 +112,7 @@ async function main() {
 
                 // 4. 更新存储（保留最近recentlyViewedCount 条）
                 enqueueSeasonsMapUpdate(latestMap => {
+                    if (currentGeneration !== routeGeneration) return null;
                     const updatedGroups = latestMap[seasonType].map(season => {
                     const identifier = isSpecial ? currentBV : matchedGroup.sid;
                     if ((isSpecial && season.BVCode === identifier) ||
@@ -168,7 +169,11 @@ async function main() {
                         ...latestMap,
                         [seasonType]: updatedGroups
                     };
-                }).catch(error => console.error('保存观看记录失败:', error));
+                }).catch(error => {
+                    if (!isExtensionContextInvalidated(error)) {
+                        console.error('保存观看记录失败:', error);
+                    }
+                });
                 console.log(`已更新${seasonType}视频列表`);
             };
 
@@ -262,6 +267,7 @@ function restoreVideoProgress(link, generation) {
 function formatUrl(url, type) {
     const urlFormat = new URL(url);
     urlFormat.search = '';
+    urlFormat.hash = '';
 
     if (type === 'seasons_archives') {
         const p = getPParam(url);

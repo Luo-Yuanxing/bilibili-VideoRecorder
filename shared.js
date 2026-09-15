@@ -50,6 +50,10 @@ function storageRemove(area, keys) {
     });
 }
 
+function isExtensionContextInvalidated(error) {
+    return error?.message?.includes('Extension context invalidated');
+}
+
 function normalizeRecentlyViewedCount(value) {
     return Number.isInteger(value) && value >= 1 && value <= 50 ? value : 3;
 }
@@ -111,16 +115,45 @@ function normalizeSeasonsMap(value) {
         return { ...DEFAULT_SEASONS_MAP };
     }
 
-    const normalizeGroups = groups => Array.isArray(groups)
-        ? groups.filter(group => group && typeof group === 'object').map(group => ({
-            ...group,
-            videos: Array.isArray(group.videos) ? group.videos : []
-        }))
-        : [];
+    const normalizeVideos = (seasonType, videos) => {
+        const videosByUrl = new Map();
+        (Array.isArray(videos) ? videos : []).forEach(video => {
+            if (!video || typeof video !== 'object') return;
+            const videoUrl = typeof video.url === 'string' ? formatUrl(video.url, seasonType) : '';
+            const videoId = videoUrl || `${video.name || ''}:${video.timestamp || ''}`;
+            if (!videosByUrl.has(videoId)) videosByUrl.set(videoId, { ...video, url: videoUrl || video.url });
+        });
+        return [...videosByUrl.values()];
+    };
+
+    const normalizeGroups = (seasonType, groups) => {
+        if (!Array.isArray(groups)) return [];
+
+        const groupIndexes = new Map();
+        const normalizedGroups = [];
+        groups.filter(group => group && typeof group === 'object').forEach((group, index) => {
+            const groupId = getSeasonId(seasonType, group, index);
+            const normalizedGroup = { ...group, videos: normalizeVideos(seasonType, group.videos) };
+            const existingIndex = groupIndexes.get(groupId);
+            if (existingIndex === undefined) {
+                groupIndexes.set(groupId, normalizedGroups.length);
+                normalizedGroups.push(normalizedGroup);
+            } else {
+                const existingGroup = normalizedGroups[existingIndex];
+                const mergedVideos = [...normalizedGroup.videos, ...existingGroup.videos];
+                normalizedGroups[existingIndex] = {
+                    ...existingGroup,
+                    ...normalizedGroup,
+                    videos: normalizeVideos(seasonType, mergedVideos)
+                };
+            }
+        });
+        return normalizedGroups;
+    };
 
     return {
-        seasons_archives: normalizeGroups(value.seasons_archives),
-        seasons_series: normalizeGroups(value.seasons_series)
+        seasons_archives: normalizeGroups('seasons_archives', value.seasons_archives),
+        seasons_series: normalizeGroups('seasons_series', value.seasons_series)
     };
 }
 
@@ -149,7 +182,7 @@ async function isSpecialCollection(BVCode) {
 function getSeasonId(seasonType, season, fallbackIndex) {
     const identifier = seasonType === 'seasons_archives'
         ? season.BVCode
-        : `${season.sid}_${season.spaceId}`;
+        : season.sid;
     return `${seasonType}:${encodeURIComponent(identifier || `invalid_${fallbackIndex}`)}`;
 }
 
@@ -270,7 +303,9 @@ async function writeSeasonsMap(seasonsMap, previousIndex) {
 function enqueueSeasonsMapUpdate(update) {
     seasonsWriteQueue = seasonsWriteQueue.catch(() => undefined).then(async () => {
         const currentMap = await loadSeasonsMap();
-        const nextMap = normalizeSeasonsMap(update(currentMap));
+        const updatedMap = update(currentMap);
+        if (!updatedMap) return currentMap;
+        const nextMap = normalizeSeasonsMap(updatedMap);
         await writeSeasonsMap(nextMap);
         return nextMap;
     });
@@ -288,6 +323,7 @@ function getPParam(urlStr) {
 function formatUrl(url, type) {
     const formattedUrl = new URL(url);
     formattedUrl.search = '';
+    formattedUrl.hash = '';
 
     if (type === 'seasons_archives') {
         formattedUrl.searchParams.set('p', getPParam(url));

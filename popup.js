@@ -90,8 +90,10 @@ function createGroupItem(group, seasonType, index) {
     const item = createTextElement('div', 'record-item', '');
     const titleContainer = createTextElement('div', 'record-title-container', '');
     const dragHandle = createTextElement('div', 'drag-handle', '');
+    const title = createTextElement('span', 'record-title', group.upName ? `${group.upName} - ${group.title}` : (group.title || '未命名 season'));
     dragHandle.draggable = true;
-    titleContainer.append(dragHandle, createTextElement('span', 'record-title', group.upName ? `${group.upName} - ${group.title}` : (group.title || '未命名 season')));
+    title.draggable = true;
+    titleContainer.append(dragHandle, title);
 
     const code = createTextElement('div', 'record-bv', '');
     code.appendChild(createTextElement('span', 'record-bvcode', group.sid ? `SID: ${group.sid}` : `BV: ${group.BVCode || ''}`));
@@ -101,6 +103,8 @@ function createGroupItem(group, seasonType, index) {
 
     dragHandle.addEventListener('dragstart', event => onDragStart(event, seasonType, index));
     dragHandle.addEventListener('dragend', onDragEnd);
+    title.addEventListener('dragstart', event => onDragStart(event, seasonType, index));
+    title.addEventListener('dragend', onDragEnd);
     item.addEventListener('dragover', event => onDragOver(event, seasonType, index));
     item.addEventListener('dragleave', onDragLeave);
     item.addEventListener('drop', event => onDrop(event, seasonType, index));
@@ -256,6 +260,16 @@ async function addRecordGroup({ groupId, duplicateMessage, createGroup }) {
     }
 }
 
+function createInitialRecord(video, seasonType) {
+    return {
+        name: video.title || '未知视频',
+        url: formatUrl(`https://www.bilibili.com/video/${video.bvid}`, seasonType),
+        timestamp: new Date().toISOString(),
+        progress: 0,
+        duration: Number(video.duration) || 0
+    };
+}
+
 // 添加新记录组 -- 特殊合集
 function addNewRecordGroupForSpecial() {
     return addRecordGroup({
@@ -269,7 +283,11 @@ function addNewRecordGroupForSpecial() {
             if (data.code !== 0 || !data.data || data.data.bvid !== BVCode) {
                 throw new Error(data.message || '无法获取视频信息');
             }
-            const group = { title: data.data.title, BVCode, videos: [] };
+            const group = {
+                title: data.data.title,
+                BVCode,
+                videos: [createInitialRecord(data.data, 'seasons_archives')]
+            };
             return { group, isDuplicate: groups.some(item => item.BVCode === BVCode) };
         }
     });
@@ -288,7 +306,14 @@ function addNewRecordGroupForNormal() {
             if (!collectionInfo) {
                 throw new Error('获取合集信息失败，请检查BV号是否正确');
             }
-            const group = { ...collectionInfo, videos: [] };
+            const videoData = await fetchJsonWithTimeout(`https://api.bilibili.com/x/web-interface/view?bvid=${encodeURIComponent(BVCode)}`, { timeoutMs: 8000 });
+            if (videoData.code !== 0 || !videoData.data || videoData.data.bvid !== BVCode) {
+                throw new Error(videoData.message || '无法获取视频信息');
+            }
+            const group = {
+                ...collectionInfo,
+                videos: [createInitialRecord(videoData.data, 'seasons_series')]
+            };
             return { group, isDuplicate: groups.some(item => item.sid === collectionInfo.sid) };
         }
     });
