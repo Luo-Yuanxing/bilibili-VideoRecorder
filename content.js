@@ -28,11 +28,12 @@ async function main() {
     if (currentGeneration !== routeGeneration) return;
     const recordsGroupMapType = isSpecial ? "recordsGroupListSpecial" : "recordsGroupListNormal";
 
-    storageGet(recordsStorage, ['recordsGroupMap']).then(data => {
-        return storageGet(chrome.storage.sync, ['recordsGroupMap', 'recentlyViewedCount']).then(settings => ({
-            recordsGroupMap: data.recordsGroupMap ?? settings.recordsGroupMap,
+    loadRecordsGroupMap().then(async storedRecordsGroupMap => {
+        const settings = await storageGet(chrome.storage.sync, ['recordsGroupMap', 'recentlyViewedCount']);
+        return ({
+            recordsGroupMap: storedRecordsGroupMap ?? settings.recordsGroupMap,
             recentlyViewedCount: settings.recentlyViewedCount
-        }));
+        });
     }).then((data) => {
         if (currentGeneration !== routeGeneration) return;
         const recordsGroupMap = normalizeRecordsGroupMap(data.recordsGroupMap);

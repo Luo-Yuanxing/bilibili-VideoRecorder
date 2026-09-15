@@ -7,16 +7,19 @@ const recordCountInput = document.getElementById('recordCount');
 const saveSettingBtn = document.getElementById('saveSetting');
 const clearCacheBtn = document.getElementById('clearCache');
 
-// 数据结构
-// 控制页面内容
-let info = { "local": [{ "recordsGroupListSpecial": "特殊记录组", "recordsGroupListNormal": "普通记录组" }] };
+const GROUP_CONFIG = [
+    { id: 'recordsGroupListSpecial', title: '特殊记录组' },
+    { id: 'recordsGroupListNormal', title: '普通记录组' }
+];
+
 // 用于存储记录组数据
-/* recordsGroupListSpecial 结构为 [{
+/* 
+    recordsGroupListSpecial: [{
             title: title,
             BVCode: BVCode,
             records: []
         }] 
-    recordsGroupListNormal 结构为 [{
+    recordsGroupListNormal: [{
             title: title,
             sid: sid,
             spaceId: spaceId,
@@ -29,25 +32,21 @@ let recentlyViewedCount = 3; // 默认最近观看记录数量
 let dragSourceIndex = null;
 let dragOverIndex = null;
 let dragSourceGroup = null;
-let lastClickedLink = null;
 
 // 加载保存的数据
 function loadData() {
     Promise.all([
-        storageGet(recordsStorage, ['recordsGroupMap']),
+        loadRecordsGroupMap(),
         storageGet(chrome.storage.sync, ['recordsGroupMap', 'recentlyViewedCount', 'lastClickedLink'])
-    ]).then(([recordData, settings]) => {
+    ]).then(([storedRecordsGroupMap, settings]) => {
         const data = {
             ...settings,
-            recordsGroupMap: recordData.recordsGroupMap ?? settings.recordsGroupMap
+            recordsGroupMap: storedRecordsGroupMap ?? settings.recordsGroupMap
         };
         // 确保recordsGroupMap存在且符合预期格式
         recordsGroupMap = normalizeRecordsGroupMap(data.recordsGroupMap);
         recentlyViewedCount = normalizeRecentlyViewedCount(data.recentlyViewedCount);
         recordCountInput.value = recentlyViewedCount;
-        if (data.lastClickedLink) {
-            lastClickedLink = data.lastClickedLink;
-        }
         initRecordGroups();
         renderRecordGroups();
     }).catch(error => showError(`读取数据失败：${error.message}`));
@@ -55,134 +54,98 @@ function loadData() {
 
 // 初始化记录组列表
 function initRecordGroups() {
-    // 遍历 info.local 数组中的每个对象
-    info.local.forEach(groupObj => {
-        // 遍历每个对象中的键值对
-        for (const [key, name] of Object.entries(groupObj)) {
-            if (document.getElementById(key)) return;
-            const recordsGroupListElement = document.createElement('div');
-            recordsGroupListElement.className = 'section';
+    GROUP_CONFIG.forEach(({ id, title }) => {
+        let recordList = document.getElementById(id);
+        if (!recordList) {
+            const section = document.createElement('div');
+            section.className = 'section';
             const recordsList = document.createElement('div');
             recordsList.className = 'records-list';
-            const heading = document.createElement('h3');
-            heading.textContent = name;
-            const list = document.createElement('div');
-            list.id = key;
-            recordsList.append(heading, list);
-            recordsGroupListElement.appendChild(recordsList);
-            const addGroupElement = document.getElementsByClassName('add-group')[0];
-            if (addGroupElement) {
-                addGroupElement.parentNode.insertBefore(recordsGroupListElement, addGroupElement.nextSibling);
-            } else {
-                document.body.appendChild(recordsGroupListElement);
-            }
+            recordsList.appendChild(createTextElement('h3', '', title));
+            recordList = document.createElement('div');
+            recordList.id = id;
+            recordsList.appendChild(recordList);
+            section.appendChild(recordsList);
+            const addGroup = document.querySelector('.add-group');
+            if (addGroup?.parentNode) addGroup.parentNode.insertBefore(section, addGroup.nextSibling);
         }
-    });
-    info.local.forEach(groupObj => Object.keys(groupObj).forEach(id => {
-        const recordList = document.getElementById(id);
-        if (!recordList) return;
+
         recordList.replaceChildren();
         const groups = recordsGroupMap[id] || [];
-        if (groups.length === 0) {
-            const empty = document.createElement('div');
-            empty.className = 'empty';
-            empty.textContent = '暂无保存的记录组';
-            recordList.appendChild(empty);
+        if (!groups.length) {
+            recordList.appendChild(createTextElement('div', 'empty', '暂无保存的记录组'));
             return;
         }
+        groups.forEach((group, index) => recordList.appendChild(createGroupItem(group, id, index)));
+    });
+}
 
-        groups.forEach((recordCard, index) => {
-            const recordKey = id === 'recordsGroupListSpecial'
-                ? `special_${recordCard.BVCode}`
-                : `normal_${recordCard.sid}_${recordCard.spaceId}`;
-            const isExpanded = expandedGroups[recordKey] || false;
-            const groupItem = document.createElement('div');
-            groupItem.className = 'record-item';
+function createTextElement(tag, className, text) {
+    const element = document.createElement(tag);
+    element.className = className;
+    element.textContent = text;
+    return element;
+}
 
-            const titleContainer = document.createElement('div');
-            titleContainer.className = 'record-title-container';
-            const dragHandle = document.createElement('div');
-            dragHandle.className = 'drag-handle';
-            dragHandle.draggable = true;
-            const title = document.createElement('span');
-            title.className = 'record-title';
-            title.textContent = recordCard.upName ? `${recordCard.upName} - ${recordCard.title}` : (recordCard.title || '未命名记录组');
-            titleContainer.append(dragHandle, title);
+function createGroupItem(group, groupId, index) {
+    const recordKey = groupId === 'recordsGroupListSpecial'
+        ? `special_${group.BVCode}`
+        : `normal_${group.sid}_${group.spaceId}`;
+    const isExpanded = Boolean(expandedGroups[recordKey]);
+    const item = createTextElement('div', 'record-item', '');
+    const titleContainer = createTextElement('div', 'record-title-container', '');
+    const dragHandle = createTextElement('div', 'drag-handle', '');
+    dragHandle.draggable = true;
+    titleContainer.append(dragHandle, createTextElement('span', 'record-title', group.upName ? `${group.upName} - ${group.title}` : (group.title || '未命名记录组')));
 
-            const code = document.createElement('div');
-            code.className = 'record-bv';
-            const codeText = document.createElement('span');
-            codeText.className = 'record-bvcode';
-            codeText.textContent = recordCard.sid ? `SID: ${recordCard.sid}` : `BV: ${recordCard.BVCode || ''}`;
-            code.appendChild(codeText);
+    const code = createTextElement('div', 'record-bv', '');
+    code.appendChild(createTextElement('span', 'record-bvcode', group.sid ? `SID: ${group.sid}` : `BV: ${group.BVCode || ''}`));
+    const actions = createTextElement('div', 'actions', '');
+    actions.append(createActionButton('expand', isExpanded ? '收起' : '展开', { key: recordKey }), createActionButton('delete', '删除', { id: groupId, index }));
+    item.append(titleContainer, code, createWatchRecords(group.records, isExpanded), actions);
 
-            const watchRecords = document.createElement('div');
-            watchRecords.className = `watch-records${isExpanded ? ' expanded' : ''}`;
-            const records = Array.isArray(recordCard.records) ? recordCard.records : [];
-            if (records.length === 0) {
-                const empty = document.createElement('div');
-                empty.className = 'empty-record';
-                empty.textContent = '暂无观看记录';
-                watchRecords.appendChild(empty);
-            } else {
-                records.forEach(record => {
-                    const entry = document.createElement('div');
-                    entry.className = 'record-entry';
-                    const infoElement = document.createElement('div');
-                    infoElement.className = 'record-info';
-                    const link = document.createElement('a');
-                    link.className = 'record-name';
-                    link.target = '_blank';
-                    link.rel = 'noopener noreferrer';
-                    link.textContent = record.name || '未命名视频';
-                    link.title = link.textContent;
-                    link.dataset.progress = String(record.progress ?? 0);
-                    try {
-                        const recordUrl = new URL(record.url);
-                        if (recordUrl.protocol === 'https:' && (recordUrl.hostname === 'bilibili.com' || recordUrl.hostname.endsWith('.bilibili.com'))) {
-                            link.href = recordUrl.toString();
-                        }
-                    } catch (error) {
-                        link.removeAttribute('href');
-                    }
-                    const date = document.createElement('span');
-                    date.className = 'record-date';
-                    date.textContent = formatDate(record.timestamp);
-                    infoElement.append(link, date);
-                    const progressBar = document.createElement('div');
-                    progressBar.className = 'progress-bar';
-                    const progress = document.createElement('div');
-                    progress.style.width = `${Math.max(0, Math.min(100, Number(record.progress) || 0))}%`;
-                    progressBar.appendChild(progress);
-                    entry.append(infoElement, progressBar);
-                    watchRecords.appendChild(entry);
-                });
-            }
+    dragHandle.addEventListener('dragstart', event => onDragStart(event, groupId, index));
+    dragHandle.addEventListener('dragend', onDragEnd);
+    item.addEventListener('dragover', event => onDragOver(event, groupId, index));
+    item.addEventListener('dragleave', onDragLeave);
+    item.addEventListener('drop', event => onDrop(event, groupId, index));
+    return item;
+}
 
-            const actions = document.createElement('div');
-            actions.className = 'actions';
-            const expandButton = document.createElement('button');
-            expandButton.className = 'action-btn expand';
-            expandButton.dataset.key = recordKey;
-            expandButton.dataset.type = 'expand';
-            expandButton.textContent = isExpanded ? '收起' : '展开';
-            const deleteButton = document.createElement('button');
-            deleteButton.className = 'action-btn delete';
-            deleteButton.dataset.id = id;
-            deleteButton.dataset.index = String(index);
-            deleteButton.dataset.type = 'delete';
-            deleteButton.textContent = '删除';
-            actions.append(expandButton, deleteButton);
-            groupItem.append(titleContainer, code, watchRecords, actions);
+function createActionButton(type, text, data) {
+    const button = createTextElement('button', `action-btn ${type}`, text);
+    button.dataset.type = type;
+    Object.entries(data).forEach(([key, value]) => { button.dataset[key] = String(value); });
+    return button;
+}
 
-            dragHandle.addEventListener('dragstart', event => onDragStart(event, id, index));
-            dragHandle.addEventListener('dragend', onDragEnd);
-            groupItem.addEventListener('dragover', event => onDragOver(event, id, index));
-            groupItem.addEventListener('dragleave', onDragLeave);
-            groupItem.addEventListener('drop', event => onDrop(event, id, index));
-            recordList.appendChild(groupItem);
-        });
-    }));
+function createWatchRecords(records, isExpanded) {
+    const container = createTextElement('div', `watch-records${isExpanded ? ' expanded' : ''}`, '');
+    if (!Array.isArray(records) || records.length === 0) {
+        container.appendChild(createTextElement('div', 'empty-record', '暂无观看记录'));
+        return container;
+    }
+    records.forEach(record => container.appendChild(createRecordEntry(record)));
+    return container;
+}
+
+function createRecordEntry(record) {
+    const entry = createTextElement('div', 'record-entry', '');
+    const infoElement = createTextElement('div', 'record-info', '');
+    const link = createTextElement('a', 'record-name', record.name || '未命名视频');
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.title = link.textContent;
+    link.dataset.progress = String(record.progress ?? 0);
+    if (isAllowedBilibiliUrl(record.url)) link.href = record.url;
+    infoElement.append(link, createTextElement('span', 'record-date', formatDate(record.timestamp)));
+
+    const progressBar = createTextElement('div', 'progress-bar', '');
+    const progress = createTextElement('div', '', '');
+    progress.style.width = `${Math.max(0, Math.min(100, Number(record.progress) || 0))}%`;
+    progressBar.appendChild(progress);
+    entry.append(infoElement, progressBar);
+    return entry;
 }
 
 // 处理按钮动作
@@ -242,141 +205,82 @@ function hideError() {
     errorMessage.style.display = 'none';
 }
 
-// 添加新记录组 -- 特殊合集
-async function addNewRecordGroupForSpecial() {
-
+function getInputBVCode() {
     const BVCode = BVCodeInput.value.trim();
-
     if (!BVCode) {
         showError('请输入BV号');
-        return;
+        return null;
     }
-
-    // 校验BV号格式
     if (!/^BV\w{10}$/i.test(BVCode)) {
         showError('BV号格式不正确，格式应为BV后跟10位字母数字');
-        return;
+        return null;
     }
+    return BVCode;
+}
 
-    if (!await isSpecialCollection(BVCode)) {
-        showError('该BV号似乎不是特殊合集类型');
-        return;
-    }
+async function addRecordGroup({ groupId, duplicateMessage, createGroup }) {
+    const BVCode = getInputBVCode();
+    if (!BVCode) return;
 
-    // 显示加载状态
     const oldBtnText = saveBtn.innerHTML;
     saveBtn.innerHTML = '<div class="spinner"></div>';
     saveBtn.disabled = true;
 
     try {
-        const data = await fetchJsonWithTimeout(`https://api.bilibili.com/x/web-interface/view?bvid=${encodeURIComponent(BVCode)}`, {
-            timeoutMs: 8000
-        });
-
-        if (data.code !== 0 || !data.data || data.data.bvid !== BVCode) {
-            throw new Error(data.message || '无法获取视频信息');
-        }
-
-        const title = data.data.title;
-
-        // 检查是否已存在同BVCode记录组
-        const existingGroup = recordsGroupMap['recordsGroupListSpecial'].find(group => group.BVCode === BVCode);
-        if (existingGroup) {
-            showError('该特殊合集已存在，请勿重复添加');
+        const { group, isDuplicate } = await createGroup(BVCode, recordsGroupMap[groupId]);
+        if (isDuplicate) {
+            showError(duplicateMessage);
             return;
         }
-
-        recordsGroupMap['recordsGroupListSpecial'].push({
-            title: title,
-            BVCode: BVCode,
-            records: []
-        });
-
+        recordsGroupMap[groupId].push(group);
         BVCodeInput.value = '';
         saveData();
         showNotification('记录组已成功添加！');
     } catch (error) {
         showError(error.message);
-        console.error('获取视频信息失败:', error);
+        console.error('获取记录组信息失败:', error);
     } finally {
-        // 恢复按钮状态
         saveBtn.innerHTML = oldBtnText;
         saveBtn.disabled = false;
     }
 }
 
+// 添加新记录组 -- 特殊合集
+function addNewRecordGroupForSpecial() {
+    return addRecordGroup({
+        groupId: 'recordsGroupListSpecial',
+        duplicateMessage: '该特殊合集已存在，请勿重复添加',
+        createGroup: async (BVCode, groups) => {
+            if (!await isSpecialCollection(BVCode)) {
+                throw new Error('该BV号似乎不是特殊合集类型');
+            }
+            const data = await fetchJsonWithTimeout(`https://api.bilibili.com/x/web-interface/view?bvid=${encodeURIComponent(BVCode)}`, { timeoutMs: 8000 });
+            if (data.code !== 0 || !data.data || data.data.bvid !== BVCode) {
+                throw new Error(data.message || '无法获取视频信息');
+            }
+            const group = { title: data.data.title, BVCode, records: [] };
+            return { group, isDuplicate: groups.some(item => item.BVCode === BVCode) };
+        }
+    });
+}
+
 // 添加新记录组 -- 普通合集
-async function addNewRecordGroupForNormal() {
-    const BVCode = BVCodeInput.value.trim();
-
-    if (!BVCode) {
-        showError('请输入BV号');
-        return;
-    }
-
-    // 校验BV号格式
-    if (!/^BV\w{10}$/i.test(BVCode)) {
-        showError('BV号格式不正确，格式应为BV后跟10位字母数字');
-        return;
-    }
-
-    // 显示加载状态
-    const oldBtnText = saveBtn.innerHTML;
-    saveBtn.innerHTML = '<div class="spinner"></div>';
-    saveBtn.disabled = true;
-
-    try {
-        // 检验是否为普通合集
-        const isSpecial = await isSpecialCollection(BVCode);
-        if (isSpecial) {
-            throw new Error('该BV号是特殊合集，请使用特殊合集功能添加');
+function addNewRecordGroupForNormal() {
+    return addRecordGroup({
+        groupId: 'recordsGroupListNormal',
+        duplicateMessage: '该合集已存在，请勿重复添加',
+        createGroup: async (BVCode, groups) => {
+            if (await isSpecialCollection(BVCode)) {
+                throw new Error('该BV号是特殊合集，请使用特殊合集功能添加');
+            }
+            const collectionInfo = await getCollectionInfo(BVCode);
+            if (!collectionInfo) {
+                throw new Error('获取合集信息失败，请检查BV号是否正确');
+            }
+            const group = { ...collectionInfo, records: [] };
+            return { group, isDuplicate: groups.some(item => item.sid === collectionInfo.sid) };
         }
-
-        // 获取合集信息
-        /**
-         * collectionInfo =
-        {
-            sid: sid,
-            spaceId: spaceId,
-            title: title,
-            upName: upName,
-        };
-         */
-        const collectionInfo = await getCollectionInfo(BVCode);
-        if (!collectionInfo) {
-            throw new Error('获取合集信息失败，请检查BV号是否正确');
-        }
-
-        // 检查是否已存在同sid记录组
-        const existingGroup = recordsGroupMap['recordsGroupListNormal'].find(group => group.sid === collectionInfo.sid);
-        if (existingGroup) {
-            showError('该合集已存在，请勿重复添加');
-            return;
-        }
-
-        recordsGroupMap['recordsGroupListNormal'].push({
-            sid: collectionInfo.sid,
-            spaceId: collectionInfo.spaceId,
-            title: collectionInfo.title,
-            upName: collectionInfo.upName,
-            records: []
-        });
-
-        BVCodeInput.value = '';
-        saveData();
-        showNotification('记录组已成功添加！');
-
-    } catch (error) {
-        showError(error.message);
-        console.error('获取合集信息失败:', error);
-    }
-    finally {
-        // 恢复按钮状态
-        saveBtn.innerHTML = oldBtnText;
-        saveBtn.disabled = false;
-    }
-
-
+    });
 }
 
 async function getCollectionInfo(BVCode) {
@@ -462,17 +366,16 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // 保存按钮点击事件
+    const submitRecordGroup = () => {
+        const selectedType = document.querySelector('.type-option.selected')?.dataset.type;
+        if (selectedType === 'special') addNewRecordGroupForSpecial();
+        if (selectedType === 'normal') addNewRecordGroupForNormal();
+    };
+
     saveBtn.addEventListener('click', (event) => {
         event.preventDefault();
         hideError();
-        // 获取选择的类型
-        const selectedType = document.querySelector('.type-option.selected').dataset.type;
-
-        if (selectedType === 'special') {
-            addNewRecordGroupForSpecial();
-        } else if (selectedType === 'normal') {
-            addNewRecordGroupForNormal();
-        }
+        submitRecordGroup();
     });
 
     // 输入框输入事件 - 清除错误
@@ -485,7 +388,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (e.key === 'Enter') {
             e.preventDefault();
             hideError();
-            addNewRecordGroupForSpecial();
+            submitRecordGroup();
         }
     });
 
