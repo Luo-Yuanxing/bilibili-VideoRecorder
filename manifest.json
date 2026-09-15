@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "bilibili-视频记录",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "记录播放列表和观看历史，提供视频记录功能。",
   "icons": {
     "16": "icons/icon16.png",
