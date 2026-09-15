@@ -26,30 +26,30 @@ async function main() {
 
     const isSpecial = await isSpecialCollection(currentBV);
     if (currentGeneration !== routeGeneration) return;
-    const recordsGroupMapType = isSpecial ? "recordsGroupListSpecial" : "recordsGroupListNormal";
+    const seasonType = isSpecial ? 'seasons_archives' : 'seasons_series';
 
-    loadRecordsGroupMap().then(async storedRecordsGroupMap => {
-        const settings = await storageGet(chrome.storage.sync, ['recordsGroupMap', 'recentlyViewedCount']);
+    loadSeasonsMap().then(async storedSeasonsMap => {
+        const settings = await storageGet(chrome.storage.sync, ['seasonsMap', 'recentlyViewedCount']);
         return ({
-            recordsGroupMap: storedRecordsGroupMap ?? settings.recordsGroupMap,
+            seasonsMap: storedSeasonsMap ?? settings.seasonsMap,
             recentlyViewedCount: settings.recentlyViewedCount
         });
     }).then((data) => {
         if (currentGeneration !== routeGeneration) return;
-        const recordsGroupMap = normalizeRecordsGroupMap(data.recordsGroupMap);
+        const seasonsMap = normalizeSeasonsMap(data.seasonsMap);
         const recentlyViewedCount = normalizeRecentlyViewedCount(data.recentlyViewedCount);
 
         // 1. 找到匹配的卡片
         let matchedGroup;
-        if (recordsGroupMapType === "recordsGroupListSpecial") {
+        if (seasonType === 'seasons_archives') {
             // 查询BVCord
-            matchedGroup = recordsGroupMap[recordsGroupMapType].find(group => group && group.BVCode === currentBV);
+            matchedGroup = seasonsMap[seasonType].find(season => season && season.BVCode === currentBV);
             if (!matchedGroup) {
                 // 如果没有找到，可能是特殊合集但未记录
-                console.log(`未找到匹配的记录组: ${currentBV}`);
+                console.log(`未找到匹配的 season: ${currentBV}`);
                 return;
             }
-        } else if (recordsGroupMapType === "recordsGroupListNormal") {
+        } else if (seasonType === 'seasons_series') {
             // 查询sid
             const collectionElement = document.querySelector('.video-pod__header .header-top .left a');
             if (!collectionElement) {
@@ -60,10 +60,10 @@ async function main() {
                 return;
             }
             const currentSID = sidMatch[1];
-            matchedGroup = recordsGroupMap[recordsGroupMapType].find(group => group && group.sid === currentSID);
+            matchedGroup = seasonsMap[seasonType].find(season => season && season.sid === currentSID);
             if (!matchedGroup) {
                 // 如果没有找到，可能是普通合集但未记录
-                console.log(`未找到匹配的记录组: ${currentBV}`);
+                console.log(`未找到匹配的 season: ${currentBV}`);
                 return;
             }
         }
@@ -91,7 +91,7 @@ async function main() {
                 const videoName = activeItem ? activeItem.textContent.trim() : '未知视频';
 
                 // 2.2 编辑url，删除无关查询参数
-                const currentUrl = formatUrl(window.location.href, recordsGroupMapType);
+                const currentUrl = formatUrl(window.location.href, seasonType);
 
                 const progress = Math.max(0, Math.min(100, Math.floor((video.currentTime / duration) * 100)));
 
@@ -111,65 +111,65 @@ async function main() {
                 };
 
                 // 4. 更新存储（保留最近recentlyViewedCount 条）
-                enqueueRecordsGroupMapUpdate(latestMap => {
-                    const updatedGroups = latestMap[recordsGroupMapType].map(group => {
+                enqueueSeasonsMapUpdate(latestMap => {
+                    const updatedGroups = latestMap[seasonType].map(season => {
                     const identifier = isSpecial ? currentBV : matchedGroup.sid;
-                    if ((isSpecial && group.BVCode === identifier) ||
-                        (!isSpecial && group.sid === identifier)) {
+                    if ((isSpecial && season.BVCode === identifier) ||
+                        (!isSpecial && season.sid === identifier)) {
                         if (isSpecial) {
-                            if (group.BVCode === currentBV) {
-                                const existingRecords = group.records;
-                                let lastRecordIndex = existingRecords.findIndex(r => r.url === newRecord.url);
+                            if (season.BVCode === currentBV) {
+                                const existingVideos = season.videos;
+                                let lastRecordIndex = existingVideos.findIndex(video => video.url === newRecord.url);
                                 // 还需保证p相同
-                                if (lastRecordIndex !== -1 && getPParam(existingRecords[lastRecordIndex].url) !== getPParam(newRecord.url)) {
+                                if (lastRecordIndex !== -1 && getPParam(existingVideos[lastRecordIndex].url) !== getPParam(newRecord.url)) {
                                     lastRecordIndex = -1; // 如果p不同，则视为新视频
                                 }
-                                let newRecords;
+                                let newVideos;
                                 if (lastRecordIndex !== -1) {
                                     // 同一视频：覆盖最近一次记录
-                                    newRecords = [...existingRecords];
-                                    newRecords[lastRecordIndex] = newRecord;
+                                    newVideos = [...existingVideos];
+                                    newVideos[lastRecordIndex] = newRecord;
                                 } else {
                                     // 新视频：添加到开头并截断
-                                    newRecords = [newRecord, ...existingRecords].slice(0, recentlyViewedCount);
+                                    newVideos = [newRecord, ...existingVideos].slice(0, recentlyViewedCount);
                                 }
 
-                                return { ...group, records: newRecords };
+                                return { ...season, videos: newVideos };
                             }
                         } else {
-                            if (group.sid === matchedGroup.sid) {
-                                const existingRecords = group.records;
-                                const lastRecordIndex = existingRecords.findIndex(r => r.url === newRecord.url);
+                            if (season.sid === matchedGroup.sid) {
+                                const existingVideos = season.videos;
+                                const lastRecordIndex = existingVideos.findIndex(video => video.url === newRecord.url);
 
-                                let newRecords;
+                                let newVideos;
                                 if (lastRecordIndex !== -1) {
                                     // 同一视频：覆盖最近一次记录
-                                    newRecords = [...existingRecords];
-                                    newRecords[lastRecordIndex] = newRecord;
+                                    newVideos = [...existingVideos];
+                                    newVideos[lastRecordIndex] = newRecord;
                                 } else {
                                     // 新视频：添加到开头并截断
-                                    newRecords = [newRecord, ...existingRecords].slice(0, recentlyViewedCount);
+                                    newVideos = [newRecord, ...existingVideos].slice(0, recentlyViewedCount);
                                 }
 
-                                return { ...group, records: newRecords };
+                                return { ...season, videos: newVideos };
                             }
                         }
                     }
-                    return group;
+                    return season;
                 });
 
                     // 处理实际存储数据大于recentlyViewedCount的情况，删除多余记录
-                    updatedGroups.forEach(group => {
-                    if (group.records.length > recentlyViewedCount) {
-                        group.records = group.records.slice(0, recentlyViewedCount);
+                    updatedGroups.forEach(season => {
+                    if (season.videos.length > recentlyViewedCount) {
+                        season.videos = season.videos.slice(0, recentlyViewedCount);
                     }
                 });
                     return {
                         ...latestMap,
-                        [recordsGroupMapType]: updatedGroups
+                        [seasonType]: updatedGroups
                     };
                 }).catch(error => console.error('保存观看记录失败:', error));
-                console.log(`已更新${recordsGroupMapType}记录组`);
+                console.log(`已更新${seasonType}视频列表`);
             }, 30000);
         }
     }).catch(error => console.error('读取观看记录失败:', error));
@@ -256,7 +256,7 @@ function formatUrl(url, type) {
     const urlFormat = new URL(url);
     urlFormat.search = '';
 
-    if (type === "recordsGroupListSpecial") {
+    if (type === 'seasons_archives') {
         const p = getPParam(url);
         urlFormat.searchParams.set('p', p);
     }

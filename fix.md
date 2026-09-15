@@ -15,7 +15,7 @@
 
 2. **首次使用时可能直接抛出异常**
 
-   `content.js:24` 读取 `recordsGroupMap` 后，没有确认其存在，就在后续访问其子属性。首次安装或存储被清空时，可能出现类似 `undefined.recordsGroupListSpecial` 的异常。
+    `content.js` 读取 `seasonsMap` 后，没有确认其存在，就在后续访问其子属性。首次安装或存储被清空时，可能出现类似 `undefined.seasons_archives` 的异常。
 
    建议：
    - 对存储数据做统一默认值和结构校验。
@@ -98,7 +98,7 @@
 
 11. **同步存储不适合高频写入完整数据**
 
-    `content.js:151` 每 30 秒写入整个 `recordsGroupMap`，可能触发 `storage.sync` 的容量和写入频率限制。
+    `content.js` 每 30 秒写入整个 `seasonsMap`，可能触发存储容量和写入频率限制。
 
     建议：
     - 观看记录使用 `chrome.storage.local`。

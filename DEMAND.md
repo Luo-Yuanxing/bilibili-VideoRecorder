@@ -9,7 +9,7 @@
 
 | ID  | 需求摘要                                      | 提出时间   | 所属分支 | 状态标签 | 负责人        |
 | --- | --------------------------------------------- | ---------- | -------- | -------- | ------------- |
-| D-1 | 记录组分为两种类型（可扩展）                  | 2025-07-22 | main     | 完成     | @Luo-Yuanxing |
+| D-1 | season 分为 seasons_archives 和 seasons_series 两种类型 | 2025-07-22 | main     | 完成     | @Luo-Yuanxing |
 | D-2 | 增加自动跳转到上次播放位置                    | 2025-07-22 | main     | 完成     | @Luo-Yuanxing |
 | D-3 | 修复同一视频记录不覆盖的问题                  | 2025-07-22 | main     | 完成     | @Luo-Yuanxing |
 | D-4 | 完成普通合集类型记录                          | 2025-07-22 | main     | 完成     | @Luo-Yuanxing |
@@ -26,8 +26,8 @@
 
 **技术方案**：
 
-1. 将原 recordsGroupList 更名为 recordsGroupMap
-2. recordsGroupMap 结构为 `{"recordsGroupListSpecial": [], "recordsGroupListNormal": []}`
+1. 使用 `seasonsMap` 统一管理两类 season
+2. `seasonsMap` 结构为 `{"seasons_archives": [], "seasons_series": []}`
 
 ### 🔖 [D-2] 增加自动跳转到上次播放位置
 

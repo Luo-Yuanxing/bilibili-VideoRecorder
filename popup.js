@@ -8,25 +8,25 @@ const saveSettingBtn = document.getElementById('saveSetting');
 const clearCacheBtn = document.getElementById('clearCache');
 
 const GROUP_CONFIG = [
-    { id: 'recordsGroupListSpecial', title: '特殊记录组' },
-    { id: 'recordsGroupListNormal', title: '普通记录组' }
+    { id: 'seasonsArchivesList', seasonType: 'seasons_archives', title: 'seasons_archives 合集' },
+    { id: 'seasonsSeriesList', seasonType: 'seasons_series', title: 'seasons_series 视频列表' }
 ];
 
 // 用于存储记录组数据
 /* 
-    recordsGroupListSpecial: [{
+    seasons_archives: [{
             title: title,
             BVCode: BVCode,
             records: []
         }] 
-    recordsGroupListNormal: [{
+    seasons_series: [{
             title: title,
             sid: sid,
             spaceId: spaceId,
             records: []
         }]
 */
-let recordsGroupMap = { "recordsGroupListSpecial": [], "recordsGroupListNormal": [] };
+let seasonsMap = { seasons_archives: [], seasons_series: [] };
 let expandedGroups = {};
 let recentlyViewedCount = 3; // 默认最近观看记录数量
 let dragSourceIndex = null;
@@ -36,15 +36,14 @@ let dragSourceGroup = null;
 // 加载保存的数据
 function loadData() {
     Promise.all([
-        loadRecordsGroupMap(),
-        storageGet(chrome.storage.sync, ['recordsGroupMap', 'recentlyViewedCount', 'lastClickedLink'])
-    ]).then(([storedRecordsGroupMap, settings]) => {
+        loadSeasonsMap(),
+        storageGet(chrome.storage.sync, ['seasonsMap', 'recentlyViewedCount', 'lastClickedLink'])
+    ]).then(([storedSeasonsMap, settings]) => {
         const data = {
             ...settings,
-            recordsGroupMap: storedRecordsGroupMap ?? settings.recordsGroupMap
+            seasonsMap: storedSeasonsMap ?? settings.seasonsMap
         };
-        // 确保recordsGroupMap存在且符合预期格式
-        recordsGroupMap = normalizeRecordsGroupMap(data.recordsGroupMap);
+        seasonsMap = normalizeSeasonsMap(data.seasonsMap);
         recentlyViewedCount = normalizeRecentlyViewedCount(data.recentlyViewedCount);
         recordCountInput.value = recentlyViewedCount;
         initRecordGroups();
@@ -54,7 +53,7 @@ function loadData() {
 
 // 初始化记录组列表
 function initRecordGroups() {
-    GROUP_CONFIG.forEach(({ id, title }) => {
+    GROUP_CONFIG.forEach(({ id, seasonType, title }) => {
         let recordList = document.getElementById(id);
         if (!recordList) {
             const section = document.createElement('div');
@@ -71,12 +70,12 @@ function initRecordGroups() {
         }
 
         recordList.replaceChildren();
-        const groups = recordsGroupMap[id] || [];
+        const groups = seasonsMap[seasonType] || [];
         if (!groups.length) {
-            recordList.appendChild(createTextElement('div', 'empty', '暂无保存的记录组'));
+            recordList.appendChild(createTextElement('div', 'empty', '暂无保存的 season'));
             return;
         }
-        groups.forEach((group, index) => recordList.appendChild(createGroupItem(group, id, index)));
+        groups.forEach((group, index) => recordList.appendChild(createGroupItem(group, seasonType, index)));
     });
 }
 
@@ -87,8 +86,8 @@ function createTextElement(tag, className, text) {
     return element;
 }
 
-function createGroupItem(group, groupId, index) {
-    const recordKey = groupId === 'recordsGroupListSpecial'
+function createGroupItem(group, seasonType, index) {
+    const recordKey = seasonType === 'seasons_archives'
         ? `special_${group.BVCode}`
         : `normal_${group.sid}_${group.spaceId}`;
     const isExpanded = Boolean(expandedGroups[recordKey]);
@@ -96,19 +95,19 @@ function createGroupItem(group, groupId, index) {
     const titleContainer = createTextElement('div', 'record-title-container', '');
     const dragHandle = createTextElement('div', 'drag-handle', '');
     dragHandle.draggable = true;
-    titleContainer.append(dragHandle, createTextElement('span', 'record-title', group.upName ? `${group.upName} - ${group.title}` : (group.title || '未命名记录组')));
+    titleContainer.append(dragHandle, createTextElement('span', 'record-title', group.upName ? `${group.upName} - ${group.title}` : (group.title || '未命名 season')));
 
     const code = createTextElement('div', 'record-bv', '');
     code.appendChild(createTextElement('span', 'record-bvcode', group.sid ? `SID: ${group.sid}` : `BV: ${group.BVCode || ''}`));
     const actions = createTextElement('div', 'actions', '');
-    actions.append(createActionButton('expand', isExpanded ? '收起' : '展开', { key: recordKey }), createActionButton('delete', '删除', { id: groupId, index }));
-    item.append(titleContainer, code, createWatchRecords(group.records, isExpanded), actions);
+    actions.append(createActionButton('expand', isExpanded ? '收起' : '展开', { key: recordKey }), createActionButton('delete', '删除', { id: seasonType, index }));
+    item.append(titleContainer, code, createWatchRecords(group.videos, isExpanded), actions);
 
-    dragHandle.addEventListener('dragstart', event => onDragStart(event, groupId, index));
+    dragHandle.addEventListener('dragstart', event => onDragStart(event, seasonType, index));
     dragHandle.addEventListener('dragend', onDragEnd);
-    item.addEventListener('dragover', event => onDragOver(event, groupId, index));
+    item.addEventListener('dragover', event => onDragOver(event, seasonType, index));
     item.addEventListener('dragleave', onDragLeave);
-    item.addEventListener('drop', event => onDrop(event, groupId, index));
+    item.addEventListener('drop', event => onDrop(event, seasonType, index));
     return item;
 }
 
@@ -160,7 +159,7 @@ function handleAction(e) {
     if (type === 'delete') {
         if (!confirm('确定要删除这个卡片吗？')) return;
         // 从对应的记录组数组中删除
-        recordsGroupMap[groupId].splice(index, 1);
+        seasonsMap[groupId].splice(index, 1);
         // 删除展开状态
         if (expandedGroups[key]) delete expandedGroups[key];
         saveData();
@@ -175,9 +174,9 @@ function handleAction(e) {
 
 // 保存数据
 function saveData() {
-    enqueueRecordsGroupMapUpdate(() => recordsGroupMap).then(nextMap => {
-        recordsGroupMap = nextMap;
-        console.log('记录组已保存:', recordsGroupMap);
+    enqueueSeasonsMapUpdate(() => seasonsMap).then(nextMap => {
+        seasonsMap = nextMap;
+        console.log('seasonsMap 已保存:', seasonsMap);
         renderRecordGroups();
     }).catch(error => showError(`保存数据失败：${error.message}`));
 }
@@ -227,15 +226,15 @@ async function addRecordGroup({ groupId, duplicateMessage, createGroup }) {
     saveBtn.disabled = true;
 
     try {
-        const { group, isDuplicate } = await createGroup(BVCode, recordsGroupMap[groupId]);
+        const { group, isDuplicate } = await createGroup(BVCode, seasonsMap[groupId]);
         if (isDuplicate) {
             showError(duplicateMessage);
             return;
         }
-        recordsGroupMap[groupId].push(group);
+        seasonsMap[groupId].push(group);
         BVCodeInput.value = '';
         saveData();
-        showNotification('记录组已成功添加！');
+        showNotification('season 已成功添加！');
     } catch (error) {
         showError(error.message);
         console.error('获取记录组信息失败:', error);
@@ -248,8 +247,8 @@ async function addRecordGroup({ groupId, duplicateMessage, createGroup }) {
 // 添加新记录组 -- 特殊合集
 function addNewRecordGroupForSpecial() {
     return addRecordGroup({
-        groupId: 'recordsGroupListSpecial',
-        duplicateMessage: '该特殊合集已存在，请勿重复添加',
+        groupId: 'seasons_archives',
+        duplicateMessage: '该 seasons_archives 合集已存在，请勿重复添加',
         createGroup: async (BVCode, groups) => {
             if (!await isSpecialCollection(BVCode)) {
                 throw new Error('该BV号似乎不是特殊合集类型');
@@ -258,7 +257,7 @@ function addNewRecordGroupForSpecial() {
             if (data.code !== 0 || !data.data || data.data.bvid !== BVCode) {
                 throw new Error(data.message || '无法获取视频信息');
             }
-            const group = { title: data.data.title, BVCode, records: [] };
+            const group = { title: data.data.title, BVCode, videos: [] };
             return { group, isDuplicate: groups.some(item => item.BVCode === BVCode) };
         }
     });
@@ -267,8 +266,8 @@ function addNewRecordGroupForSpecial() {
 // 添加新记录组 -- 普通合集
 function addNewRecordGroupForNormal() {
     return addRecordGroup({
-        groupId: 'recordsGroupListNormal',
-        duplicateMessage: '该合集已存在，请勿重复添加',
+        groupId: 'seasons_series',
+        duplicateMessage: '该 seasons_series 视频列表已存在，请勿重复添加',
         createGroup: async (BVCode, groups) => {
             if (await isSpecialCollection(BVCode)) {
                 throw new Error('该BV号是特殊合集，请使用特殊合集功能添加');
@@ -277,7 +276,7 @@ function addNewRecordGroupForNormal() {
             if (!collectionInfo) {
                 throw new Error('获取合集信息失败，请检查BV号是否正确');
             }
-            const group = { ...collectionInfo, records: [] };
+            const group = { ...collectionInfo, videos: [] };
             return { group, isDuplicate: groups.some(item => item.sid === collectionInfo.sid) };
         }
     });
@@ -360,8 +359,8 @@ document.addEventListener('DOMContentLoaded', () => {
             normalOption.classList.remove('selected');
             this.classList.add('selected');
             typeHint.textContent = this.id === 'specialOption' ?
-                '特殊合集：多P系列视频，共享相同标题' :
-                '一般合集：单视频或多视频合集';
+                'seasons_archives：共享标题的多P视频合集' :
+                'seasons_series：按 sid 归档的视频列表';
         });
     });
 
@@ -499,7 +498,7 @@ function onDrop(e, group, index) {
     const targetIndex = dragOverIndex;
 
     if (dragSourceGroup === group && sourceIndex !== null && targetIndex !== null && sourceIndex !== targetIndex) {
-        const groupArray = recordsGroupMap[group];
+        const groupArray = seasonsMap[group];
         const isTop = e.currentTarget.classList.contains('drag-over-top');
         const rawFinalPosition = isTop ? targetIndex : targetIndex + 1;
         const finalPosition = sourceIndex < rawFinalPosition ? rawFinalPosition - 1 : rawFinalPosition;
@@ -517,7 +516,7 @@ function onDrop(e, group, index) {
 clearCacheBtn.addEventListener('click', () => {
     if (confirm('确定要清空所有存储数据吗？此操作不可撤销。')) {
         Promise.all([
-            new Promise((resolve, reject) => recordsStorage.clear(() => {
+            new Promise((resolve, reject) => seasonsStorage.clear(() => {
                 const error = chrome.runtime.lastError;
                 if (error) reject(new Error(error.message)); else resolve();
             })),
@@ -526,7 +525,7 @@ clearCacheBtn.addEventListener('click', () => {
                 if (error) reject(new Error(error.message)); else resolve();
             }))
         ]).then(() => {
-            recordsGroupMap = normalizeRecordsGroupMap();
+            seasonsMap = normalizeSeasonsMap();
             expandedGroups = {};
             recentlyViewedCount = 3;
             loadData();
