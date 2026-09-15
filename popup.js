@@ -169,12 +169,27 @@ function handleAction(e) {
 }
 
 // 保存数据
-function saveData() {
-    enqueueSeasonsMapUpdate(() => seasonsMap).then(nextMap => {
+async function saveData() {
+    try {
+        const nextMap = await enqueueSeasonsMapUpdate(() => seasonsMap);
         seasonsMap = nextMap;
         console.log('seasonsMap 已保存:', seasonsMap);
         renderRecordGroups();
-    }).catch(error => showError(`保存数据失败：${error.message}`));
+    } catch (error) {
+        showError(`保存数据失败：${error.message}`);
+        throw error;
+    }
+}
+
+async function notifyCurrentTabSeasonAdded() {
+    try {
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (tab?.id !== undefined) {
+            await chrome.tabs.sendMessage(tab.id, { type: 'seasonAdded' });
+        }
+    } catch (error) {
+        console.debug('当前标签页未运行视频记录脚本:', error);
+    }
 }
 
 // 显示通知
@@ -229,7 +244,8 @@ async function addRecordGroup({ groupId, duplicateMessage, createGroup }) {
         }
         seasonsMap[groupId].push(group);
         BVCodeInput.value = '';
-        saveData();
+        await saveData();
+        await notifyCurrentTabSeasonAdded();
         showNotification('season 已成功添加！');
     } catch (error) {
         showError(error.message);
@@ -409,8 +425,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }).then(() => {
                 console.log('最后点击的链接已保存:', { url, progress });
+                return chrome.tabs.create({ url });
             }).catch(error => showError(`保存播放位置失败：${error.message}`));
-            chrome.tabs.create({ url });
         }
     });
 });
@@ -526,10 +542,9 @@ clearCacheBtn.addEventListener('click', () => {
             recentlyViewedCount = 3;
             loadData();
             showNotification('所有存储数据已清空！');
+            chrome.runtime.reload();
         }).catch(error => showError(`清空存储失败：${error.message}`));
         recordCountInput.value = 3;
-        // 刷新插件
-        chrome.runtime.reload();
     }
 });
 

@@ -70,7 +70,7 @@ async function main() {
 
         if (matchedGroup) {
             // 2. 监听播放行为
-            progressInterval = setInterval(() => {
+            const recordProgress = () => {
                 if (currentGeneration !== routeGeneration) {
                     stopTracking();
                     return;
@@ -170,7 +170,10 @@ async function main() {
                     };
                 }).catch(error => console.error('保存观看记录失败:', error));
                 console.log(`已更新${seasonType}视频列表`);
-            }, 30000);
+            };
+
+            recordProgress();
+            progressInterval = setInterval(recordProgress, 30000);
         }
     }).catch(error => console.error('读取观看记录失败:', error));
 }
@@ -198,6 +201,10 @@ if (document.readyState === 'complete' || document.readyState === 'interactive')
 // 增强的路由监听
 const observer = new MutationObserver(checkLocationChange);
 observer.observe(document.body, { childList: true, subtree: true });
+
+chrome.runtime.onMessage.addListener(request => {
+    if (request?.type === 'seasonAdded') main();
+});
 
 // 额外添加历史事件监听（针对浏览器前进/后退）
 window.addEventListener('popstate', checkLocationChange);

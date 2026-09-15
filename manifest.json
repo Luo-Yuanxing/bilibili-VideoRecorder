@@ -22,7 +22,7 @@
     "css": ["content.css"],
     "run_at": "document_idle"
   }],
-  "permissions": ["storage"],
+  "permissions": ["storage", "activeTab"],
   "host_permissions": [
     "https://*.bilibili.com/*",
     "https://space.bilibili.com/*",

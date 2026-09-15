@@ -127,12 +127,7 @@ function normalizeSeasonsMap(value) {
 async function isSpecialCollection(BVCode) {
     const url = `https://www.bilibili.com/video/${encodeURIComponent(BVCode)}`;
     try {
-        const response = await fetch(url);
-        if (!response.ok) {
-            throw new Error('视频请求失败');
-        }
-
-        const html = await response.text();
+        const html = await fetchTextWithTimeout(url, { timeoutMs: 8000 });
         const doc = new DOMParser().parseFromString(html, 'text/html');
         const items = doc.querySelectorAll('.video-pod__item');
         if (items.length === 0) {
@@ -273,7 +268,7 @@ async function writeSeasonsMap(seasonsMap, previousIndex) {
 }
 
 function enqueueSeasonsMapUpdate(update) {
-    seasonsWriteQueue = seasonsWriteQueue.then(async () => {
+    seasonsWriteQueue = seasonsWriteQueue.catch(() => undefined).then(async () => {
         const currentMap = await loadSeasonsMap();
         const nextMap = normalizeSeasonsMap(update(currentMap));
         await writeSeasonsMap(nextMap);
