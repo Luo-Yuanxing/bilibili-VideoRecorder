@@ -49,7 +49,7 @@ function loadData() {
 
 // 初始化记录组列表
 function initRecordGroups() {
-    GROUP_CONFIG.forEach(({ id, seasonType, title }) => {
+    GROUP_CONFIG.forEach(({ id, seasonType, title }, configIndex) => {
         let recordList = document.getElementById(id);
         if (!recordList) {
             const section = document.createElement('div');
@@ -62,7 +62,13 @@ function initRecordGroups() {
             recordsList.appendChild(recordList);
             section.appendChild(recordsList);
             const addGroup = document.querySelector('.add-group');
-            if (addGroup?.parentNode) addGroup.parentNode.insertBefore(section, addGroup.nextSibling);
+            const previousList = document.getElementById(GROUP_CONFIG[configIndex - 1]?.id);
+            const previousSection = previousList?.closest('.section');
+            if (previousSection?.parentNode) {
+                previousSection.parentNode.insertBefore(section, previousSection.nextSibling);
+            } else if (addGroup?.parentNode) {
+                addGroup.parentNode.insertBefore(section, addGroup.nextSibling);
+            }
         }
 
         recordList.replaceChildren();
